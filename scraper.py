@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from typing import Optional
 
@@ -11,6 +12,12 @@ try:
     JOBSPY_AVAILABLE = True
 except ImportError:
     JOBSPY_AVAILABLE = False
+
+try:
+    from linkedin_scraper import BrowserManager, JobSearchScraper
+    LINKEDIN_AVAILABLE = True
+except ImportError:
+    LINKEDIN_AVAILABLE = False
 
 def prompt_search_query() -> str:
     """Prompt for job search query."""
@@ -106,13 +113,85 @@ def df_to_job_records(df) -> list[dict]:
         records.append(record)
     return records
 
+async def scrape_with_linkedin(query: str, location: str, limit: int) -> list[dict]:
+    """Scrape jobs using LinkedIn-scraper (async)."""
+    if not LINKEDIN_AVAILABLE:
+        print("LinkedIn-scraper not installed. Run: pip install linkedin-scraper")
+        return []
+    print(f"\nScraping with LinkedIn-scraper: '{query}' in '{location}'...")
+    try:
+        async with BrowserManager() as browser:
+            if not os.path.exists("session.json"):
+                print("  No session.json found, skipping LinkedIn")
+                return []
+            await browser.load_session("session.json")
+            scraper = JobSearchScraper(browser.page)
+            jobs = await scraper.search(
+                keywords=query,
+                location=location,
+                limit=limit,
+            )
+            print(f"  Found {len(jobs)} jobs")
+            return linkedin_jobs_to_records(jobs)
+    except Exception as e:
+        print(f"  LinkedIn error: {e}")
+        return []
+
+def linkedin_jobs_to_records(jobs) -> list[dict]:
+    """Convert LinkedIn Job objects to records."""
+    records = []
+    for job in jobs:
+        record = {
+            "title": getattr(job, "title", None),
+            "company": getattr(job, "company", None),
+            "location": getattr(job, "location", None),
+            "job_url": getattr(job, "linkedin_url", None),
+            "description": getattr(job, "description", None),
+            "date_posted": None,
+            "job_type": getattr(job, "employment_type", None),
+            "salary": None,
+            "source": "linkedin",
+            "is_remote": None,
+        }
+        records.append(record)
+    return records
+
+def deduplicate_jobs(jobs: list[dict]) -> list[dict]:
+    """Deduplicate by job_url."""
+    seen = set()
+    result = []
+    for job in jobs:
+        url = job.get("job_url")
+        if url and url not in seen:
+            seen.add(url)
+            result.append(job)
+    return result
+
+def write_jobs_jsonl(jobs: list[dict], output_path: str):
+    """Write jobs to JSON Lines file."""
+    with open(output_path, "w") as f:
+        for job in jobs:
+            f.write(json.dumps(job) + "\n")
+
+async def main_async(config: dict):
+    """Async main for scraping with fallback logic."""
+    jobs = []
+    if config["source"] in (1, 3):
+        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"])
+    # Fallback if source is 2, or if JobSpy returned <5 jobs and source is 3
+    if config["source"] == 2 or (config["source"] == 3 and len(jobs) < 5):
+        linkedin_jobs = await scrape_with_linkedin(config["query"], config["location"], config["limit"])
+        jobs.extend(linkedin_jobs)
+    # Deduplicate by job_url
+    jobs = deduplicate_jobs(jobs)
+    # Write output
+    write_jobs_jsonl(jobs, config["output"])
+    print(f"\nTotal: {len(jobs)} unique jobs written to {config['output']}")
+
 def main():
     """Entry point."""
     config = run_menu()
-    if config["source"] in (1, 3):
-        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"])
-        print(f"JobSpy returned {len(jobs)} jobs")
-    print(f"\nConfig: {config}")
+    asyncio.run(main_async(config))
 
 if __name__ == "__main__":
     main()
