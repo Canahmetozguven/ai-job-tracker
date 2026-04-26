@@ -69,13 +69,14 @@ def parse_gemini_response(response_text: str) -> dict:
     lines = response_text.split('\n')
     for line in lines:
         line = line.strip()
-        if line.startswith('FIT SCORE:'):
-            result['score'] = line.split(':', 1)[1].strip()
-        elif line.startswith('WHY GOOD:'):
-            result['why_good'] = line.split(':', 1)[1].strip()
-        elif line.startswith('WHY BAD:'):
-            result['why_bad'] = line.split(':', 1)[1].strip()
-        elif line.startswith('RECOMMENDATION:'):
-            result['recommendation'] = line.split(':', 1)[1].strip()
+        # Handle both "FIT SCORE:" and "1. FIT SCORE:" formats
+        if 'FIT SCORE:' in line:
+            result['score'] = line.split('FIT SCORE:', 1)[1].strip()
+        elif 'WHY GOOD:' in line:
+            result['why_good'] = line.split('WHY GOOD:', 1)[1].strip()
+        elif 'WHY BAD:' in line:
+            result['why_bad'] = line.split('WHY BAD:', 1)[1].strip()
+        elif 'RECOMMENDATION:' in line:
+            result['recommendation'] = line.split('RECOMMENDATION:', 1)[1].strip()
 
     return result
