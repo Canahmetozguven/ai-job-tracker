@@ -22,7 +22,7 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         async with async_playwright() as p:
             # Launch Brave with existing profile
             context = await p.chromium.launch_persistent_context(
-                executable_path='/tmp/brave-nightly/brave',
+                executable_path='/usr/bin/brave-browser',
                 user_data_dir=browser_path,
                 headless=True,
                 args=[
@@ -102,5 +102,5 @@ Respond with EXACTLY this format:
         company=job.get('company', 'N/A'),
         location=job.get('location', 'N/A'),
         url=job.get('job_url', 'N/A'),
-        description=job.get('description', 'N/A')[:2000]
+        description=(job.get('description') or 'N/A')[:2000]
     )
