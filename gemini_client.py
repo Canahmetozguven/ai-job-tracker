@@ -1,14 +1,15 @@
-"""Gemini browser interaction via Playwright with existing browser profile."""
+"""Gemini browser interaction via Playwright with Brave Nightly."""
 
 import asyncio
-import os
 from typing import Optional, Dict
+from playwright.async_api import async_playwright
+
 
 async def submit_to_gemini(browser_path: str, prompt: str) -> str:
     """Submit prompt to Gemini via browser.
 
     Args:
-        browser_path: Path to browser profile directory
+        browser_path: Path to Chrome/Brave profile directory
         prompt: Prompt text to submit
 
     Returns:
@@ -18,60 +19,63 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         Exception: If browser interaction fails
     """
     try:
-        from playwright.async_api import async_playwright
-
         async with async_playwright() as p:
-            # Launch Chrome with existing profile
+            # Launch Brave with existing profile
             context = await p.chromium.launch_persistent_context(
+                executable_path='/tmp/brave-nightly/brave',
                 user_data_dir=browser_path,
-                headless=False,
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ]
             )
-            page = context.pages[0] if context.pages else await context.new_page()
-            await page.goto("https://gemini.google.com/app")
-            await page.wait_for_load_state("networkidle")
 
-            # Find and fill the prompt textarea
-            textarea = page.locator("textarea")
-            await textarea.wait_for(timeout=30000)
-            await textarea.fill(prompt)
+            try:
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto("https://gemini.google.com/app", wait_until="domcontentloaded")
+                await page.wait_for_timeout(5000)
 
-            # Click send button
-            send_button = page.locator("button[aria-label='Send']").first
-            await send_button.click()
+                # Find input area and fill
+                input_box = page.locator("[role='textbox']").first
+                await input_box.wait_for(timeout=30000)
+                await input_box.fill(prompt)
 
-            # Wait for response to appear
-            await page.wait_for_timeout(30000)
+                # Wait a moment for button to become enabled
+                await page.wait_for_timeout(1000)
 
-            # Extract response
-            response_elements = page.locator("[data-genai-content]")
-            if await response_elements.count() > 0:
-                response = await response_elements.first.text_content()
-            else:
-                messages = page.locator(".conversation-message.assistant")
-                if await messages.count() > 0:
-                    response = await messages.last.text_content()
-                else:
+                # Click send button - it enables after text is entered
+                # Turkish: 'Mesaj gönder' | English: 'Send message'
+                send_button = page.locator("[aria-label='Mesaj gönder'], [aria-label='Send message']").first
+                await send_button.click()
+
+                # Wait for response
+                await page.wait_for_timeout(20000)
+
+                # Extract response
+                try:
+                    response_elem = page.locator(".response-content")
+                    if await response_elem.count() > 0:
+                        response = await response_elem.first.text_content()
+                    else:
+                        response = "No response received"
+                except:
                     response = "No response received"
 
-            await context.close()
-            return response
+                return response
+
+            finally:
+                await context.close()
 
     except ImportError:
-        raise Exception("Playwright not installed. Run: uv pip install playwright && playwright install chromium")
+        raise Exception("Playwright not installed. Run: uv pip install playwright")
     except Exception as e:
         raise Exception(f"Gemini interaction failed: {e}")
 
 
 def build_prompt(profile: str, job: dict) -> str:
-    """Build prompt from profile and job data.
-
-    Args:
-        profile: User profile text
-        job: Job dict with title, company, location, description, job_url
-
-    Returns:
-        Formatted prompt string
-    """
+    """Build prompt from profile and job data."""
     template = """Analyze this job posting for fit with my profile.
 
 MY PROFILE:
