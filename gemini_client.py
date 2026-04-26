@@ -1,14 +1,14 @@
-"""Gemini browser interaction via Camoufox."""
+"""Gemini browser interaction via Playwright with existing browser profile."""
 
 import asyncio
-import re
+import os
 from typing import Optional, Dict
 
 async def submit_to_gemini(browser_path: str, prompt: str) -> str:
     """Submit prompt to Gemini via browser.
 
     Args:
-        browser_path: Path to browser profile
+        browser_path: Path to browser profile directory
         prompt: Prompt text to submit
 
     Returns:
@@ -18,50 +18,49 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         Exception: If browser interaction fails
     """
     try:
-        import camoufox
+        from playwright.async_api import async_playwright
 
-        # Load browser with existing session
-        browser = camoufox.Browser(
-            profile_path=browser_path,
-            headless=False
-        )
+        async with async_playwright() as p:
+            # Launch Chrome with existing profile
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=browser_path,
+                headless=False,
+            )
+            page = context.pages[0] if context.pages else await context.new_page()
+            await page.goto("https://gemini.google.com/app")
+            await page.wait_for_load_state("networkidle")
 
-        page = browser.new_page()
-        await page.goto("https://gemini.google.com/app")
-        await page.wait_for_load_state("networkidle")
+            # Find and fill the prompt textarea
+            textarea = page.locator("textarea")
+            await textarea.wait_for(timeout=30000)
+            await textarea.fill(prompt)
 
-        # Find and fill the prompt textarea
-        textarea = page.locator("textarea")
-        await textarea.wait_for(timeout=30000)
-        await textarea.fill(prompt)
+            # Click send button
+            send_button = page.locator("button[aria-label='Send']").first
+            await send_button.click()
 
-        # Click send button
-        send_button = page.locator("button[aria-label='Send']").first
-        await send_button.click()
+            # Wait for response to appear
+            await page.wait_for_timeout(30000)
 
-        # Wait for response to appear
-        await page.wait_for_timeout(30000)  # 30 second wait
-
-        # Extract response - look for generated content
-        # Gemini shows response in the conversation
-        response_elements = page.locator("[data-genai-content]")
-        if await response_elements.count() > 0:
-            response = await response_elements.first.text_content()
-        else:
-            # Fallback: get last assistant message
-            messages = page.locator(".conversation-message.assistant")
-            if await messages.count() > 0:
-                response = await messages.last.text_content()
+            # Extract response
+            response_elements = page.locator("[data-genai-content]")
+            if await response_elements.count() > 0:
+                response = await response_elements.first.text_content()
             else:
-                response = "No response received"
+                messages = page.locator(".conversation-message.assistant")
+                if await messages.count() > 0:
+                    response = await messages.last.text_content()
+                else:
+                    response = "No response received"
 
-        browser.close()
-        return response
+            await context.close()
+            return response
 
     except ImportError:
-        raise Exception("Camoufox not installed. Run: uv pip install camoufox")
+        raise Exception("Playwright not installed. Run: uv pip install playwright && playwright install chromium")
     except Exception as e:
         raise Exception(f"Gemini interaction failed: {e}")
+
 
 def build_prompt(profile: str, job: dict) -> str:
     """Build prompt from profile and job data.
@@ -99,5 +98,5 @@ Respond with EXACTLY this format:
         company=job.get('company', 'N/A'),
         location=job.get('location', 'N/A'),
         url=job.get('job_url', 'N/A'),
-        description=job.get('description', 'N/A')[:2000]  # Limit to first 2000 chars
+        description=job.get('description', 'N/A')[:2000]
     )
