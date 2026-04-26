@@ -1,0 +1,75 @@
+CAN AHMET ÖZGÜVEN
+DATA SCIENTIST
+Ankara | 05396879669 | canahmetozguven@gmail.com
+
+SUMMARY
+Data Scientist with a unique background in Psychological Counseling, blending deep analytical skills
+with an understanding of human behavior. Specializes in Health & Benefits Technology, transforming
+complex clinical and behavioral data into production-grade signals that drive user engagement and
+wellness outcomes. Proficient in building end-to-end ELT processes in Google BigQuery, integrating
+Generative AI (LLMs) into production pipelines, and accelerating development workflows using AI-
+native tools (Cursor, Claude). Experienced in remote, international cross-functional teams.
+
+PROFESSIONAL EXPERIENCE
+Data Scientist | Well | Remote (US-Based)                                       Nov2023 - Present
+  Machine Learning & Model Optimization: Engineered features for the Consumer Action
+  Engagement Model, utilizing behavioral signals to achieve a 3% improvement in model
+  performance. Integrated MLflow into the training pipeline to establish robust experiment
+  tracking, model registry, and reproducible lifecycle management.
+  Pipeline Architecture & Optimization: Refactored core consumer data pipelines to align real-time
+  PostgreSQL transactional data with BigQuery, achieving a 3-5% performance improvement
+  across various environments. Designed a sampling-based testing framework that validates
+  pipeline logic using randomly selected consumer subsets, ensuring data integrity before full-
+  scale execution.
+  Clinical Data Modeling & Feature Engineering: Designed and maintained production-grade "Fact"
+  tables in Google BigQuery and SQL to identify clinical signals (e.g., GLP-1 weight loss usage,
+  nicotine dependence). These models directly power personalized member coaching and
+  downstream analytics.
+  GenAI Integration & AI-Native Workflows: Integrated Google Gemini (GenAI SDK) into production
+  pipelines for structured text generation. Leveraged AI-driven development tools (Cursor, Claude,
+  Gemini CLI) to accelerate code refactoring and validate SQL logic consistency between BigQuery
+  and PostgreSQL environments.
+  Enterprise Program Logic: Spearheaded the data logic implementation for Premium Reduction
+  and Wellness Incentive programs for major enterprise clients (e.g., Bank of America, UNC Health,
+  USAA). Translated complex business rules into robust SQL logic to determine member eligibility
+  and reward distribution.
+
+
+Junior Python Developer | Smart Maple | Ankara, Türkiye                        Oct 2022 - Nov 2023
+
+  Created end-to-end ETL/ELT, visualization, and cleaning pipelines using Python and SQL.
+  Employed web scraping techniques (Scrapy, Selenium, Playwright) to acquire valuable external data.
+  Improved key business metrics by 10% through the implementation of a new SQL data pipeline.
+  Designed and built a data visualization dashboard to support data-driven business decisions.
+Python Coding Tutor | Kodland | Remote
+                                                                               Aug 2022 - Nov 2022
+  Taught Python programming to students and managed children's learning progress.
+
+School Psychological Counselor | Eğitim Bilimleri | Ankara, Türkiye           Sep 2021 - Aug 2022
+EDUCATION
+Bachelor's Degree in Psychological Counseling and Guidance                            2016 - 2021
+Kastamonu University
+   GPA: 3.44/4.00
+   ERASMUS+ Romania
+   Horizontal movement from Ufuk University
+Python Data Science Career Track
+DataCamp
+   Completed an intensive bootcamp focused on data analysis and modeling.
+SKILLS
+                               ML: Machine Learning, Deep          Databases: PostgreSQL,
+Programming: Python, SQL
+                               Learning, Generative AI, Data       Google BigQuery, MS SQL, No
+                               Analysis, Web Scraping, MLflow      sql
+
+
+VOLUNTEERING
+
+Volunteer Coding Instructor                                                          2024 - Present
+Educational Volunteers Foundation of Turkey (TEGV)
+   Teach coding fundamentals to underprivileged children, fostering an interest in technology
+   and problem-solving skills.
+
+
+LANGUAGES
+Turkish — Native               English — Full Professional Proficiency
+

@@ -13,7 +13,7 @@ async def send_message(chat_id: str, text: str, token: str):
         token: Telegram bot token
     """
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=text, parse_mode=telegram.constants.PARSEMODE_MARKDOWN)
+    await bot.send_message(chat_id=chat_id, text=text, parse_mode=telegram.constants.ParseMode.MARKDOWN)
 
 def format_job_analysis(job: dict, analysis: dict) -> str:
     """Format job analysis as Telegram message.
