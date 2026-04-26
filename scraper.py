@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Job scraper CLI using JobSpy and LinkedIn-scraper."""
+"""Job scraper CLI using JobSpy and LinkedIn-scraper with scheduled mode."""
 
+import argparse
 import asyncio
 import json
 import os
 import sys
+import time
+from datetime import datetime
 from typing import Optional
 
 try:
@@ -19,58 +22,12 @@ try:
 except ImportError:
     LINKEDIN_AVAILABLE = False
 
-def prompt_search_query() -> str:
-    """Prompt for job search query."""
-    return input("Enter job search query: ").strip()
-
-def prompt_location() -> str:
-    """Prompt for location."""
-    return input("Enter location (city, state/country): ").strip()
-
-def prompt_source() -> int:
-    """Prompt for source selection."""
-    print("\nSelect source:")
-    print("  [1] JobSpy only (default)")
-    print("  [2] LinkedIn-scraper only")
-    print("  [3] Both with fallback (JobSpy → LinkedIn)")
-    while True:
-        choice = input("Choice [1]: ").strip() or "1"
-        if choice in ("1", "2", "3"):
-            return int(choice)
-        print("Invalid choice, please enter 1, 2, or 3")
-
-def prompt_results_limit() -> int:
-    """Prompt for results limit per source."""
-    while True:
-        limit = input("Results limit per source [10]: ").strip() or "10"
-        try:
-            n = int(limit)
-            if n > 0:
-                return n
-        except ValueError:
-            pass
-        print("Please enter a positive number")
-
-def prompt_output_file() -> str:
-    """Prompt for output file path."""
-    return input("Output file [jobs.jsonl]: ").strip() or "jobs.jsonl"
-
-def run_menu() -> dict:
-    """Run interactive menu, return config dict."""
-    return {
-        "query": prompt_search_query(),
-        "location": prompt_location(),
-        "source": prompt_source(),
-        "limit": prompt_results_limit(),
-        "output": prompt_output_file(),
-    }
-
 def scrape_with_jobspy(query: str, location: str, limit: int) -> list[dict]:
     """Scrape jobs using JobSpy."""
     if not JOBSPY_AVAILABLE:
         print("JobSpy not installed. Run: pip install python-jobspy")
         return []
-    print(f"\nScraping with JobSpy: '{query}' in '{location}'...")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scraping with JobSpy: '{query}' in '{location}'...")
     try:
         df = scrape_jobs(
             site_name=["indeed", "linkedin", "zip_recruiter", "google"],
@@ -103,7 +60,6 @@ def df_to_job_records(df) -> list[dict]:
             "source": row.get("site_name", "unknown"),
             "is_remote": bool(row.get("is_remote")) if "is_remote" in row else None,
         }
-        # Handle salary if present
         if row.get("min_amount") or row.get("max_amount"):
             record["salary"] = {
                 "min": row.get("min_amount"),
@@ -118,7 +74,7 @@ async def scrape_with_linkedin(query: str, location: str, limit: int) -> list[di
     if not LINKEDIN_AVAILABLE:
         print("LinkedIn-scraper not installed. Run: pip install linkedin-scraper")
         return []
-    print(f"\nScraping with LinkedIn-scraper: '{query}' in '{location}'...")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scraping with LinkedIn-scraper: '{query}' in '{location}'...")
     try:
         async with BrowserManager() as browser:
             if not os.path.exists("session.json"):
@@ -167,31 +123,143 @@ def deduplicate_jobs(jobs: list[dict]) -> list[dict]:
             result.append(job)
     return result
 
-def write_jobs_jsonl(jobs: list[dict], output_path: str):
-    """Write jobs to JSON Lines file."""
-    with open(output_path, "w") as f:
-        for job in jobs:
-            f.write(json.dumps(job) + "\n")
+def read_existing_jobs(output_path: str) -> set:
+    """Read existing job URLs from output file."""
+    seen = set()
+    if os.path.exists(output_path):
+        with open(output_path) as f:
+            for line in f:
+                try:
+                    job = json.loads(line)
+                    if job.get("job_url"):
+                        seen.add(job["job_url"])
+                except json.JSONDecodeError:
+                    continue
+    return seen
 
-async def main_async(config: dict):
-    """Async main for scraping with fallback logic."""
+def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set):
+    """Append new jobs to JSON Lines file, skipping duplicates."""
+    count = 0
+    with open(output_path, "a") as f:
+        for job in jobs:
+            url = job.get("job_url")
+            if url and url not in existing_urls:
+                f.write(json.dumps(job) + "\n")
+                existing_urls.add(url)
+                count += 1
+    return count
+
+async def run_scrape(config: dict):
+    """Run a single scrape cycle."""
     jobs = []
     if config["source"] in (1, 3):
         jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"])
-    # Fallback if source is 2, or if JobSpy returned <5 jobs and source is 3
     if config["source"] == 2 or (config["source"] == 3 and len(jobs) < 5):
         linkedin_jobs = await scrape_with_linkedin(config["query"], config["location"], config["limit"])
         jobs.extend(linkedin_jobs)
-    # Deduplicate by job_url
     jobs = deduplicate_jobs(jobs)
-    # Write output
-    write_jobs_jsonl(jobs, config["output"])
-    print(f"\nTotal: {len(jobs)} unique jobs written to {config['output']}")
+    return jobs
+
+async def run_daemon(config: dict):
+    """Run scraper in daemon mode at specified interval."""
+    interval_seconds = config["interval"] * 60
+    print(f"Starting daemon mode - scraping every {config['interval']} minutes")
+    print(f"Output file: {config['output']}")
+    print(f"Query: {config['query']} in {config['location']}")
+    print(f"Sources: {config['source']}")
+    print("Press Ctrl+C to stop\n")
+
+    count_total = 0
+    count_all = 0
+    existing_urls = read_existing_jobs(config["output"])
+
+    while True:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"\n{'='*50}")
+        print(f"[{timestamp}] Starting scrape cycle...")
+        jobs = await run_scrape(config)
+        new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        count_total += new_count
+        count_all += len(jobs)
+        print(f"[{timestamp}] Cycle complete: {new_count} new ({len(jobs)} total), {count_total} cumulative")
+        print(f"Next scrape in {config['interval']} minutes...")
+        await asyncio.sleep(interval_seconds)
 
 def main():
-    """Entry point."""
-    config = run_menu()
-    asyncio.run(main_async(config))
+    parser = argparse.ArgumentParser(description="Job scraper with scheduled mode")
+    parser.add_argument("--query", "-q", help="Job search query")
+    parser.add_argument("--location", "-l", help="Location (city, state/country)")
+    parser.add_argument("--source", "-s", type=int, default=1, choices=[1, 2, 3],
+                        help="1=JobSpy only, 2=LinkedIn only, 3=Both with fallback")
+    parser.add_argument("--limit", "-n", type=int, default=10, help="Results limit per source")
+    parser.add_argument("--output", "-o", default="jobs.jsonl", help="Output file path")
+    parser.add_argument("--daemon", "-d", action="store_true", help="Run continuously")
+    parser.add_argument("--interval", "-i", type=int, default=30, help="Interval in minutes (daemon mode)")
+    parser.add_argument("--append", "-a", action="store_true", help="Append to output file (don't overwrite)")
+
+    args = parser.parse_args()
+
+    # Interactive mode if no args provided
+    if len(sys.argv) == 1:
+        query = input("Enter job search query: ").strip()
+        location = input("Enter location (city, state/country): ").strip()
+        print("\nSelect source:")
+        print("  [1] JobSpy only (default)")
+        print("  [2] LinkedIn-scraper only")
+        print("  [3] Both with fallback (JobSpy → LinkedIn)")
+        while True:
+            choice = input("Choice [1]: ").strip() or "1"
+            if choice in ("1", "2", "3"):
+                source = int(choice)
+                break
+            print("Invalid choice")
+        limit = 10
+        while True:
+            limit_str = input("Results limit per source [10]: ").strip() or "10"
+            try:
+                limit = int(limit_str)
+                if limit > 0:
+                    break
+            except ValueError:
+                pass
+            print("Please enter a positive number")
+        output = input("Output file [jobs.jsonl]: ").strip() or "jobs.jsonl"
+        append_mode = input("Append to file? [y/N]: ").strip().lower() == "y"
+        interval = 30
+        daemon = input("Run continuously? [y/N]: ").strip().lower() == "y"
+        if daemon:
+            while True:
+                interval_str = input("Interval in minutes [30]: ").strip() or "30"
+                try:
+                    interval = int(interval_str)
+                    if interval > 0:
+                        break
+                except ValueError:
+                    pass
+    else:
+        query = args.query or input("Enter job search query: ").strip() if not args.query else args.query
+        location = args.location or input("Enter location (city, state/country): ").strip() if not args.location else args.location
+        source = args.source
+        limit = args.limit
+        output = args.output
+        append_mode = args.append
+        daemon = args.daemon
+        interval = args.interval
+
+    config = {
+        "query": query,
+        "location": location,
+        "source": source,
+        "limit": limit,
+        "output": output,
+        "interval": interval,
+    }
+
+    if append_mode and os.path.exists(output):
+        existing = read_existing_jobs(output)
+        print(f"Resuming with {len(existing)} existing jobs loaded")
+
+    asyncio.run(run_daemon(config) if daemon else run_scrape(config))
 
 if __name__ == "__main__":
     main()
