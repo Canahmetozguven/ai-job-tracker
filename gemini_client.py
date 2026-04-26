@@ -1,4 +1,4 @@
-"""Gemini browser interaction via Camufix."""
+"""Gemini browser interaction via Camoufox."""
 
 import asyncio
 import re
@@ -18,13 +18,12 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         Exception: If browser interaction fails
     """
     try:
-        # Import camufix - install if needed
-        import camufix
+        import camoufox
 
         # Load browser with existing session
-        browser = camufix.Browser(
+        browser = camoufox.Browser(
             profile_path=browser_path,
-            headless=False  # Set True for production
+            headless=False
         )
 
         page = browser.new_page()
@@ -60,7 +59,7 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         return response
 
     except ImportError:
-        raise Exception("Camufix not installed. Run: pip install camufix")
+        raise Exception("Camoufox not installed. Run: uv pip install camoufox")
     except Exception as e:
         raise Exception(f"Gemini interaction failed: {e}")
 
