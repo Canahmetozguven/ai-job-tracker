@@ -9,7 +9,8 @@ from config import (
     BROWSER_PROFILE_PATH,
     PROFILE_FILE,
     JOBS_INPUT_FILE,
-    ANALYSIS_OUTPUT_FILE
+    ANALYSIS_OUTPUT_FILE,
+    DEFAULT_CHAT_ID
 )
 from user_profile import load_profile
 from job_loader import load_jobs
@@ -50,7 +51,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Job analyzer with Gemini AI")
     parser.add_argument("--profile", default=PROFILE_FILE, help="Profile file path")
     parser.add_argument("--jobs", default=JOBS_INPUT_FILE, help="Jobs input file")
-    parser.add_argument("--chat-id", required=True, help="Telegram chat ID")
+    parser.add_argument("--chat-id", default=DEFAULT_CHAT_ID, help="Telegram chat ID")
     parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
     parser.add_argument("--browser-path", default=BROWSER_PROFILE_PATH, help="Browser profile path")
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
