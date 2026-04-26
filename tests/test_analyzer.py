@@ -1,5 +1,5 @@
 import pytest
-from profile import load_profile
+from user_profile import load_profile
 from job_loader import load_jobs, count_jobs
 from telegram_notify import format_job_analysis, parse_gemini_response
 

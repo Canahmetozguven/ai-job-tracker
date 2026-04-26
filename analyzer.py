@@ -11,7 +11,7 @@ from config import (
     JOBS_INPUT_FILE,
     ANALYSIS_OUTPUT_FILE
 )
-from profile import load_profile
+from user_profile import load_profile
 from job_loader import load_jobs
 from telegram_notify import send_message, format_job_analysis, parse_gemini_response
 from gemini_client import submit_to_gemini, build_prompt

@@ -7,7 +7,7 @@ TELEGRAM_BOT_TOKEN = "8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w"
 BROWSER_PROFILE_PATH = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
 
 # Default paths
-PROFILE_FILE = "profile.txt"
+PROFILE_FILE = "profile.txt"  # User's profile (rename from user_profile.py on disk if needed
 JOBS_INPUT_FILE = "jobs.jsonl"
 ANALYSIS_OUTPUT_FILE = "analysis_results.jsonl"
 
