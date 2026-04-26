@@ -17,6 +17,8 @@ from job_loader import load_jobs
 from telegram_notify import send_message, format_job_analysis, parse_gemini_response
 from gemini_client import submit_to_gemini, build_prompt
 
+CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
+
 async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str) -> dict:
     """Analyze single job with Gemini and send to Telegram.
 
@@ -51,7 +53,6 @@ async def main():
     parser = argparse.ArgumentParser(description="Job analyzer with Gemini AI")
     parser.add_argument("--profile", default=PROFILE_FILE, help="Profile file path")
     parser.add_argument("--jobs", default=JOBS_INPUT_FILE, help="Jobs input file")
-    parser.add_argument("--chat-id", default=DEFAULT_CHAT_ID, help="Telegram chat ID")
     parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
     parser.add_argument("--browser-path", default=BROWSER_PROFILE_PATH, help="Browser profile path")
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
@@ -74,7 +75,7 @@ async def main():
     for i, job in enumerate(jobs):
         print(f"\n[{i+1}/{len(jobs)}] Analyzing: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}")
         try:
-            result = await analyze_job(job, profile, args.chat_id, args.browser_path)
+            result = await analyze_job(job, profile, CHAT_ID, args.browser_path)
             save_result(result, args.output)
             success_count += 1
             print(f"  ✓ Done - Score: {result['analysis'].get('score', 'N/A')}")
