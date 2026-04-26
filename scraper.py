@@ -22,20 +22,24 @@ try:
 except ImportError:
     LINKEDIN_AVAILABLE = False
 
-def scrape_with_jobspy(query: str, location: str, limit: int) -> list[dict]:
-    """Scrape jobs using JobSpy."""
+def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0) -> list[dict]:
+    """Scrape jobs using JobSpy. hours_old filters by freshness (0=disabled)."""
     if not JOBSPY_AVAILABLE:
         print("JobSpy not installed. Run: pip install python-jobspy")
         return []
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scraping with JobSpy: '{query}' in '{location}'...")
+    kwargs = {
+        "site_name": ["indeed", "linkedin", "zip_recruiter", "google"],
+        "search_term": query,
+        "location": location,
+        "results_wanted": limit,
+        "verbose": 1,
+    }
+    if hours_old > 0:
+        kwargs["hours_old"] = hours_old
+        print(f"  Filter: jobs posted in last {hours_old} hour(s)")
     try:
-        df = scrape_jobs(
-            site_name=["indeed", "linkedin", "zip_recruiter", "google"],
-            search_term=query,
-            location=location,
-            results_wanted=limit,
-            verbose=1,
-        )
+        df = scrape_jobs(**kwargs)
         print(f"  Found {len(df)} jobs")
         return df_to_job_records(df)
     except Exception as e:
@@ -150,10 +154,11 @@ def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set):
     return count
 
 async def run_scrape(config: dict):
-    """Run a single scrape cycle."""
+    """Run a single scrape cycle. Uses hours_old filter to get fresh jobs."""
+    hours_old = config.get("hours_old", 0)
     jobs = []
     if config["source"] in (1, 3):
-        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"])
+        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"], hours_old)
     if config["source"] == 2 or (config["source"] == 3 and len(jobs) < 5):
         linkedin_jobs = await scrape_with_linkedin(config["query"], config["location"], config["limit"])
         jobs.extend(linkedin_jobs)
@@ -195,6 +200,7 @@ def main():
     parser.add_argument("--output", "-o", default="jobs.jsonl", help="Output file path")
     parser.add_argument("--daemon", "-d", action="store_true", help="Run continuously")
     parser.add_argument("--interval", "-i", type=int, default=30, help="Interval in minutes (daemon mode)")
+    parser.add_argument("--hours", "-H", type=int, default=0, help="Filter jobs posted in last N hours (0=disabled)")
     parser.add_argument("--append", "-a", action="store_true", help="Append to output file (don't overwrite)")
 
     args = parser.parse_args()
@@ -245,6 +251,7 @@ def main():
         append_mode = args.append
         daemon = args.daemon
         interval = args.interval
+        hours_old = args.hours
 
     config = {
         "query": query,
@@ -253,6 +260,7 @@ def main():
         "limit": limit,
         "output": output,
         "interval": interval,
+        "hours_old": hours_old,
     }
 
     if append_mode and os.path.exists(output):
