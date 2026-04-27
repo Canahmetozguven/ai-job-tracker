@@ -66,44 +66,33 @@ def parse_gemini_response(response_text: str) -> dict:
         'recommendation': 'N/A'
     }
 
-    lines = response_text.split('\n')
-    current_field = None
-    current_content = []
+    # Remove "Gemini şunu dedi:" prefix if present
+    if 'Gemini şunu dedi:' in response_text:
+        response_text = response_text.split('Gemini şunu dedi:', 1)[1]
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+    # Handle both newline-separated and inline formats
+    # Pattern: "FIT SCORE: X/10" or "1. FIT SCORE: X/10" followed by "WHY GOOD: ..." etc.
 
-        # Check for field headers (with or without numbers)
-        if 'FIT SCORE:' in line:
-            result['score'] = line.split('FIT SCORE:', 1)[1].strip().split()[0]  # Get just "X/10"
-            current_field = None
-        elif 'WHY GOOD:' in line:
-            if current_field == 'why_good' and current_content:
-                result['why_good'] = ' '.join(current_content)
-            current_field = 'why_good'
-            current_content = [line.split('WHY GOOD:', 1)[1].strip()]
-        elif 'WHY BAD:' in line:
-            if current_field == 'why_good' and current_content:
-                result['why_good'] = ' '.join(current_content)
-            current_field = 'why_bad'
-            current_content = [line.split('WHY BAD:', 1)[1].strip()]
-        elif 'RECOMMENDATION:' in line:
-            if current_field in ('why_good', 'why_bad') and current_content:
-                result[current_field] = ' '.join(current_content)
-            current_field = 'recommendation'
-            current_content = [line.split('RECOMMENDATION:', 1)[1].strip()]
-        elif current_field and line:
-            # Continuation of previous field
-            current_content.append(line)
+    import re
 
-    # Save last field
-    if current_field == 'why_good' and current_content:
-        result['why_good'] = ' '.join(current_content)
-    elif current_field == 'why_bad' and current_content:
-        result['why_bad'] = ' '.join(current_content)
-    elif current_field == 'recommendation' and current_content:
-        result['recommendation'] = ' '.join(current_content)
+    # Extract score - look for "FIT SCORE: X/10" pattern
+    score_match = re.search(r'FIT SCORE:\s*(\d+/10)', response_text, re.IGNORECASE)
+    if score_match:
+        result['score'] = score_match.group(1)
+
+    # Extract WHY GOOD - everything between "WHY GOOD:" and "WHY BAD:" or "RECOMMENDATION:"
+    why_good_match = re.search(r'WHY GOOD:\s*(.*?)(?=WHY BAD:|RECOMMENDATION:|$)', response_text, re.IGNORECASE | re.DOTALL)
+    if why_good_match:
+        result['why_good'] = why_good_match.group(1).strip()
+
+    # Extract WHY BAD - everything between "WHY BAD:" and "RECOMMENDATION:" or end
+    why_bad_match = re.search(r'WHY BAD:\s*(.*?)(?=RECOMMENDATION:|$)', response_text, re.IGNORECASE | re.DOTALL)
+    if why_bad_match:
+        result['why_bad'] = why_bad_match.group(1).strip()
+
+    # Extract recommendation
+    rec_match = re.search(r'RECOMMENDATION:\s*(Apply|Skip|Review)', response_text, re.IGNORECASE)
+    if rec_match:
+        result['recommendation'] = rec_match.group(1).strip()
 
     return result
