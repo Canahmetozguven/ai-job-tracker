@@ -1,7 +1,12 @@
 """Configuration for job analyzer."""
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Telegram Bot Token (bot that sends messages)
-TELEGRAM_BOT_TOKEN = "8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Browser Profile Path (Brave backup with authenticated session)
 BROWSER_PROFILE_PATH = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"

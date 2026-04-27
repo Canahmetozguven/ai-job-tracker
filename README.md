@@ -31,8 +31,20 @@ job_analyzer/
 ### 1. Install Dependencies
 
 ```bash
-uv pip install camoufox playwright python-telegram-bot
+uv pip install camoufox playwright python-telegram-bot python-dotenv
 ```
+
+### 2. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+TELEGRAM_BOT_TOKEN=your-bot-token-here
+```
+
+### 3. Configure Browser Profile (Optional)
+
+Edit `config.py` with your browser profile path:
 
 ### 2. Configure
 
