@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import argparse
+from datetime import datetime, timedelta
 from config import (
     TELEGRAM_BOT_TOKEN,
     BROWSER_PROFILE_PATH,
@@ -18,6 +19,46 @@ from telegram_notify import send_message, format_job_analysis, parse_gemini_resp
 from gemini_client import submit_to_gemini, build_prompt
 
 CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
+
+def get_seen_urls(results_file: str) -> set:
+    """Get URLs of already analyzed jobs."""
+    seen = set()
+    try:
+        with open(results_file) as f:
+            for line in f:
+                try:
+                    job = json.loads(line).get('job', {})
+                    url = job.get('job_url')
+                    if url:
+                        seen.add(url)
+                except json.JSONDecodeError:
+                    continue
+    except FileNotFoundError:
+        pass
+    return seen
+
+def filter_recent_jobs(jobs: list, hours: int) -> list:
+    """Filter jobs posted within last N hours."""
+    if hours <= 0:
+        return jobs
+    cutoff = datetime.now() - timedelta(hours=hours)
+    filtered = []
+    for job in jobs:
+        date_str = job.get('date_posted')
+        if not date_str:
+            continue
+        try:
+            # Try parsing ISO format date
+            job_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # If date has no timezone, assume UTC
+            if job_date.tzinfo is None:
+                job_date = job_date.replace(tzinfo=None)
+            if job_date >= cutoff:
+                filtered.append(job)
+        except (ValueError, TypeError):
+            # If date parsing fails, include the job
+            filtered.append(job)
+    return filtered
 
 async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str) -> dict:
     """Analyze single job with Gemini and send to Telegram.
@@ -56,6 +97,8 @@ async def main():
     parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
     parser.add_argument("--browser-path", default=BROWSER_PROFILE_PATH, help="Browser profile path")
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
+    parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
+    parser.add_argument("--skip-seen", action="store_true", help="Skip already analyzed jobs")
     args = parser.parse_args()
 
     print(f"Loading profile from {args.profile}...")
@@ -63,11 +106,27 @@ async def main():
 
     print(f"Loading jobs from {args.jobs}...")
     jobs = list(load_jobs(args.jobs))
-    print(f"Found {len(jobs)} jobs to analyze")
+    print(f"Found {len(jobs)} total jobs")
+
+    # Filter by hours
+    if args.hours > 0:
+        jobs = filter_recent_jobs(jobs, args.hours)
+        print(f"Filtered to {len(jobs)} jobs from last {args.hours} hours")
+
+    # Skip already seen
+    if args.skip_seen:
+        seen_urls = get_seen_urls(args.output)
+        original_count = len(jobs)
+        jobs = [j for j in jobs if j.get('job_url') not in seen_urls]
+        print(f"Skipped {original_count - len(jobs)} already analyzed jobs")
 
     if args.limit > 0:
         jobs = jobs[:args.limit]
         print(f"Limited to {args.limit} jobs")
+
+    if not jobs:
+        print("No jobs to process")
+        return
 
     success_count = 0
     error_count = 0
