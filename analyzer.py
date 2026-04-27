@@ -19,6 +19,8 @@ from telegram_notify import send_message, format_job_analysis, parse_gemini_resp
 from gemini_client import submit_to_gemini, build_prompt
 
 CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
+MAX_RETRIES = 3
+RETRY_DELAY = 30  # seconds
 
 def get_seen_urls(results_file: str) -> set:
     """Get URLs of already analyzed jobs."""
@@ -60,7 +62,7 @@ def filter_recent_jobs(jobs: list, hours: int) -> list:
             filtered.append(job)
     return filtered
 
-async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str) -> dict:
+async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, max_retries: int = 3) -> dict:
     """Analyze single job with Gemini and send to Telegram.
 
     Args:
@@ -68,13 +70,32 @@ async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str) 
         profile: User profile text
         chat_id: Telegram chat ID
         browser_path: Path to browser profile
+        max_retries: Number of retry attempts for Gemini failures
 
     Returns:
         Analysis result dict
     """
     prompt = build_prompt(profile, job)
     print(f"  Submitting to Gemini...")
-    response = await submit_to_gemini(browser_path, prompt)
+    
+    # Retry loop for Gemini failures
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = await submit_to_gemini(browser_path, prompt)
+            if response and response != "No response received" and not response.startswith("Gemini şunu dedi:No response"):
+                break
+            last_error = f"Empty response from Gemini (attempt {attempt + 1}/{max_retries})"
+        except Exception as e:
+            last_error = str(e)
+        
+        if attempt < max_retries - 1:
+            print(f"  Gemini failed (attempt {attempt + 1}/{max_retries}), retrying in {RETRY_DELAY}s...")
+            await asyncio.sleep(RETRY_DELAY)
+    else:
+        # All retries exhausted
+        raise Exception(f"Gemini failed after {max_retries} attempts: {last_error}")
+    
     analysis = parse_gemini_response(response)
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
@@ -99,6 +120,7 @@ async def main():
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
     parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
     parser.add_argument("--skip-seen", action="store_true", help="Skip already analyzed jobs")
+    parser.add_argument("--retries", type=int, default=MAX_RETRIES, help="Max retries per job on Gemini failure")
     args = parser.parse_args()
 
     print(f"Loading profile from {args.profile}...")
@@ -134,7 +156,7 @@ async def main():
     for i, job in enumerate(jobs):
         print(f"\n[{i+1}/{len(jobs)}] Analyzing: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}")
         try:
-            result = await analyze_job(job, profile, CHAT_ID, args.browser_path)
+            result = await analyze_job(job, profile, CHAT_ID, args.browser_path, args.retries)
             save_result(result, args.output)
             success_count += 1
             print(f"  ✓ Done - Score: {result['analysis'].get('score', 'N/A')}")
