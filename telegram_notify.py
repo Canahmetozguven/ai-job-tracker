@@ -76,7 +76,7 @@ def parse_gemini_response(response_text: str) -> dict:
     import re
 
     # Extract score - look for "FIT SCORE: X/10" pattern
-    score_match = re.search(r'FIT SCORE:\s*(\d+/10)', response_text, re.IGNORECASE)
+    score_match = re.search(r'FIT SCORE:\s*([\d.]+/10)', response_text, re.IGNORECASE)
     if score_match:
         result['score'] = score_match.group(1)
 
