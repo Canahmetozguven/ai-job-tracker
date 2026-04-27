@@ -1,8 +1,16 @@
+# Logs
+*.log
+
+# Python cache
 __pycache__/
 *.pyc
-*.pdf
-USER_INFO_BACKUP_DESKTOP-MR1KOEH/
-*.jsonl
-jobs_turkey*.jsonl
-analysis_results.jsonl
+
+# Environment
 .env
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
