@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -22,8 +23,22 @@ try:
 except ImportError:
     LINKEDIN_AVAILABLE = False
 
-def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0) -> list[dict]:
-    """Scrape jobs using JobSpy. hours_old filters by freshness (0=disabled)."""
+PROXY_FILE = "proxies/working.txt"
+
+def load_proxies(path: str) -> list[str]:
+    """Load proxies from file, returns list of 'host:port' strings."""
+    if not os.path.exists(path):
+        print(f"  Warning: proxy file not found at {path}")
+        return []
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip() and ":" in line]
+
+def get_random_proxy(proxies: list[str]) -> str | None:
+    """Return a random proxy or None if list is empty."""
+    return random.choice(proxies) if proxies else None
+
+def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0, proxy: str = None) -> list[dict]:
+    """Scrape jobs using JobSpy. hours_old filters by freshness (0=disabled). Proxy is optional."""
     if not JOBSPY_AVAILABLE:
         print("JobSpy not installed. Run: pip install python-jobspy")
         return []
@@ -38,6 +53,9 @@ def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0
     if hours_old > 0:
         kwargs["hours_old"] = hours_old
         print(f"  Filter: jobs posted in last {hours_old} hour(s)")
+    if proxy:
+        kwargs["proxy"] = proxy
+        print(f"  Using proxy: {proxy}")
     try:
         df = scrape_jobs(**kwargs)
         print(f"  Found {len(df)} jobs")
@@ -153,25 +171,27 @@ def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set):
                 count += 1
     return count
 
-async def run_scrape(config: dict):
+async def run_scrape(config: dict, proxy: str = None):
     """Run a single scrape cycle. Uses hours_old filter to get fresh jobs."""
     hours_old = config.get("hours_old", 0)
     jobs = []
     if config["source"] in (1, 3):
-        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"], hours_old)
+        jobs = scrape_with_jobspy(config["query"], config["location"], config["limit"], hours_old, proxy)
     if config["source"] == 2 or (config["source"] == 3 and len(jobs) < 5):
         linkedin_jobs = await scrape_with_linkedin(config["query"], config["location"], config["limit"])
         jobs.extend(linkedin_jobs)
     jobs = deduplicate_jobs(jobs)
     return jobs
 
-async def run_daemon(config: dict):
+async def run_daemon(config: dict, proxy: str = None):
     """Run scraper in daemon mode at specified interval."""
     interval_seconds = config["interval"] * 60
     print(f"Starting daemon mode - scraping every {config['interval']} minutes")
     print(f"Output file: {config['output']}")
     print(f"Query: {config['query']} in {config['location']}")
     print(f"Sources: {config['source']}")
+    if proxy:
+        print(f"Proxy: {proxy}")
     print("Press Ctrl+C to stop\n")
 
     count_total = 0
@@ -180,9 +200,12 @@ async def run_daemon(config: dict):
 
     while True:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cycle_proxy = get_random_proxy(proxies) if proxies else None
+        if cycle_proxy:
+            print(f"[{timestamp}] Using proxy: {cycle_proxy}")
         print(f"\n{'='*50}")
         print(f"[{timestamp}] Starting scrape cycle...")
-        jobs = await run_scrape(config)
+        jobs = await run_scrape(config, cycle_proxy)
         new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
         count_total += new_count
         count_all += len(jobs)
@@ -202,6 +225,8 @@ def main():
     parser.add_argument("--interval", "-i", type=int, default=30, help="Interval in minutes (daemon mode)")
     parser.add_argument("--hours", "-H", type=int, default=0, help="Filter jobs posted in last N hours (0=disabled)")
     parser.add_argument("--append", "-a", action="store_true", help="Append to output file (don't overwrite)")
+    parser.add_argument("--no-proxy", action="store_true", help="Disable proxy rotation")
+    parser.add_argument("--proxy", help="Use a specific proxy instead of random")
 
     args = parser.parse_args()
 
@@ -252,6 +277,20 @@ def main():
         daemon = args.daemon
         interval = args.interval
         hours_old = args.hours
+        no_proxy = args.no_proxy
+        specific_proxy = args.proxy
+
+    # Load proxies
+    proxies = [] if no_proxy else load_proxies(PROXY_FILE)
+    if proxies:
+        print(f"Loaded {len(proxies)} proxies from {PROXY_FILE}")
+    else:
+        print("No proxies loaded (using direct connection)")
+
+    # Determine proxy for this run
+    run_proxy = specific_proxy if specific_proxy else (random.choice(proxies) if proxies else None)
+    if run_proxy:
+        print(f"Using proxy: {run_proxy}")
 
     config = {
         "query": query,
@@ -267,7 +306,15 @@ def main():
         existing = read_existing_jobs(output)
         print(f"Resuming with {len(existing)} existing jobs loaded")
 
-    asyncio.run(run_daemon(config) if daemon else run_scrape(config))
+    if daemon:
+        asyncio.run(run_daemon(config, run_proxy))
+    else:
+        async def run_once():
+            existing_urls = read_existing_jobs(config["output"])
+            jobs = await run_scrape(config, run_proxy)
+            new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+            print(f"Wrote {new_count} new jobs to {config['output']}")
+        asyncio.run(run_once())
 
 if __name__ == "__main__":
     main()
