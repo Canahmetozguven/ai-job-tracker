@@ -135,14 +135,28 @@ def linkedin_jobs_to_records(jobs) -> list[dict]:
     return records
 
 def deduplicate_jobs(jobs: list[dict]) -> list[dict]:
-    """Deduplicate by job_url."""
+    """Deduplicate by job_url while keeping no-URL jobs when needed."""
     seen = set()
     result = []
+    has_url_jobs = any(job.get("job_url") for job in jobs)
+    seen_no_url = False
+
     for job in jobs:
         url = job.get("job_url")
-        if url and url not in seen:
+        if url:
+            if url in seen:
+                continue
             seen.add(url)
             result.append(job)
+            continue
+
+        if has_url_jobs:
+            if seen_no_url:
+                continue
+            seen_no_url = True
+
+        result.append(job)
+
     return result
 
 def read_existing_jobs(output_path: str) -> set:

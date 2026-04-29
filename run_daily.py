@@ -12,6 +12,7 @@ from datetime import datetime
 from config import TELEGRAM_BOT_TOKEN, DEFAULT_CHAT_ID
 import telegram_notify
 import telegram
+import proxy_scraper
 
 # Use the venv Python explicitly — sys.executable may resolve to system Python in cron
 PYTHON = "/home/can/Desktop/job/.venv/bin/python"
@@ -114,6 +115,23 @@ def print_summary(send_tg: bool = True):
 def validate_proxies() -> list[str]:
     """Re-validate proxy list, return working ones."""
     run_summary["started_at"] = datetime.now()
+
+    print(f"Refreshing proxies into {PROXY_INPUT}...")
+    try:
+        scrape_result = proxy_scraper.scrape_all(PROXY_INPUT)
+        print(
+            f"Fetched {scrape_result['total']} unique proxies from "
+            f"{len(scrape_result['sources'])} sources"
+        )
+    except Exception as e:
+        print(f"Proxy refresh failed: {e}")
+        run_summary["errors"].append(f"Proxy refresh failed: {e}")
+
+    if os.path.exists(PROXY_INPUT):
+        with open(PROXY_INPUT) as f:
+            run_summary["proxy_validation"]["total"] = sum(
+                1 for line in f if line.strip() and ":" in line
+            )
     
     if not os.path.exists(PROXY_INPUT):
         print(f"Proxy input not found: {PROXY_INPUT}")
@@ -138,7 +156,6 @@ def validate_proxies() -> list[str]:
     with open(PROXY_OUTPUT) as f:
         working = [line.strip() for line in f if line.strip() and ":" in line]
     
-    run_summary["proxy_validation"]["total"] = 238  # Would need to parse from output ideally
     run_summary["proxy_validation"]["working"] = len(working)
     print(f"Proxy validation complete: {len(working)} working")
     return working
