@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import argparse
+import logging
 from datetime import datetime, timedelta
 from config import (
     TELEGRAM_BOT_TOKEN,
@@ -17,6 +18,17 @@ from user_profile import load_profile
 from job_loader import load_jobs
 from telegram_notify import send_message, format_job_analysis, parse_gemini_response
 from gemini_client import submit_to_gemini, build_prompt
+
+# Setup logging to cron.log
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('cron.log', mode='w'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
 MAX_RETRIES = 3
@@ -99,7 +111,13 @@ async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, 
     analysis = parse_gemini_response(response)
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
-    await send_message(chat_id, message, TELEGRAM_BOT_TOKEN)
+    try:
+        await send_message(chat_id, message, TELEGRAM_BOT_TOKEN)
+        print(f"  ✓ Sent to Telegram")
+    except Exception as e:
+        logger.error(f"Failed to send Telegram message: {e}")
+        print(f"  ✗ Telegram error: {e}")
+        raise
     return {
         'job': job,
         'analysis': analysis,

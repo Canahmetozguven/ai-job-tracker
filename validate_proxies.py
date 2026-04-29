@@ -11,17 +11,22 @@ from typing import List, Tuple
 TEST_URL = "http://httpbin.org/ip"
 TIMEOUT = 8  # seconds per proxy
 MAX_WORKERS = 20  # parallel threads
+MIN_WORKING = 51  # stop after collecting this many working proxies
 
-def test_proxy(proxy: str) -> Tuple[str, bool]:
-    """Test a single proxy, return (proxy, is_working)."""
+def test_proxy(proxy: str) -> Tuple[str, bool, float]:
+    """Test a single proxy, return (proxy, is_working, elapsed_time)."""
+    import time
+    start = time.time()
     try:
         proxy_handler = urllib.request.ProxyHandler({'http': f'http://{proxy}'})
         opener = urllib.request.build_opener(proxy_handler)
         opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
         resp = opener.open(TEST_URL, timeout=TIMEOUT)
-        return (proxy, resp.status == 200)
+        elapsed = time.time() - start
+        return (proxy, resp.status == 200, elapsed)
     except Exception:
-        return (proxy, False)
+        elapsed = time.time() - start
+        return (proxy, False, elapsed)
 
 def load_proxies(path: str) -> List[str]:
     """Load proxies from file."""
@@ -50,14 +55,33 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_proxy = {executor.submit(test_proxy, p): p for p in proxies}
         for i, future in enumerate(concurrent.futures.as_completed(future_to_proxy)):
-            proxy, is_working = future.result()
-            if is_working:
-                working.append(proxy)
-            if (i + 1) % 20 == 0:
-                print(f"  Progress: {i+1}/{len(proxies)}, {len(working)} working")
+            try:
+                proxy, is_working, elapsed = future.result(timeout=TIMEOUT + 1)
+            except concurrent.futures.TimeoutError:
+                proxy = future_to_proxy[future]
+                print(f"  [{i+1}] {proxy} - timed out after {TIMEOUT}s, skipping")
+                continue
+            except Exception as e:
+                proxy = future_to_proxy[future]
+                print(f"  [{i+1}] {proxy} - error: {e}")
+                continue
 
-    print(f"\nFound {len(working)} working proxies")
-    save_proxies(working, output_file)
+            if is_working:
+                working.append((elapsed, proxy))
+                print(f"  [{i+1}] {proxy} - OK ({elapsed:.2f}s) [{len(working)}/{MIN_WORKING}]")
+                if len(working) >= MIN_WORKING:
+                    print(f"\nCollected {MIN_WORKING} working proxies, canceling remaining...")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+            else:
+                print(f"  [{i+1}] {proxy} - failed")
+
+    # Sort by fastest response time
+    working.sort(key=lambda x: x[0])
+    final_proxies = [proxy for _, proxy in working]
+
+    print(f"\nFound {len(final_proxies)} working proxies (fastest first)")
+    save_proxies(final_proxies, output_file)
     print(f"Saved to {output_file}")
 
 if __name__ == "__main__":

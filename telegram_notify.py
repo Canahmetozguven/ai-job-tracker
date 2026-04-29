@@ -96,3 +96,62 @@ def parse_gemini_response(response_text: str) -> dict:
         result['recommendation'] = rec_match.group(1).strip()
 
     return result
+
+def format_run_summary(summary: dict) -> str:
+    """Format run summary as Telegram message.
+
+    Args:
+        summary: Run summary dict with proxy_validation, scrape, analyze, errors
+
+    Returns:
+        Formatted markdown message
+    """
+    lines = ["📊 *Daily Job Scraper - Run Summary*\n"]
+
+    # Proxy section
+    pv = summary.get("proxy_validation", {})
+    status = "✅" if pv.get("working", 0) > 0 else "❌"
+    lines.append(f"{status} *Proxy Validation*")
+    lines.append(f"   Working: {pv.get('working', 0)}/{pv.get('total', '?')}")
+    if pv.get("selected"):
+        lines.append(f"   Selected: `{pv['selected']}`")
+    lines.append("")
+
+    # Scrape section
+    sc = summary.get("scrape", {})
+    status_map = {"success": "✅", "partial": "⚠️", "failed": "❌", "not_run": "➖"}
+    status = status_map.get(sc.get("status", "not_run"), "➖")
+    lines.append(f"{status} *Scraping*")
+    lines.append(f"   Found: {sc.get('found', 0)}")
+    lines.append(f"   New: {sc.get('new', 0)}")
+    lines.append("")
+
+    # Analyze section
+    an = summary.get("analyze", {})
+    if an.get("status") != "not_run":
+        status_map = {"success": "✅", "partial": "⚠️", "failed": "❌", "skipped": "⏭️"}
+        status = status_map.get(an.get("status", "not_run"), "➖")
+        lines.append(f"{status} *Analysis*")
+        lines.append(f"   Processed: {an.get('processed', 0)}")
+        lines.append(f"   Succeeded: {an.get('succeeded', 0)}")
+        lines.append(f"   Failed: {an.get('failed', 0)}")
+        lines.append("")
+
+    # Errors section
+    errors = summary.get("errors", [])
+    if errors:
+        lines.append(f"❌ *Errors ({len(errors)})*")
+        for err in errors:
+            lines.append(f"   • {err}")
+        lines.append("")
+
+    # Overall status
+    all_ok = (
+        pv.get("working", 0) > 0
+        and sc.get("status") in ("success", "partial")
+        and an.get("status") != "failed"
+    )
+    overall = "✅ *SUCCESS*" if all_ok else "❌ *ISSUES DETECTED*"
+    lines.append(overall)
+
+    return "\n".join(lines)
