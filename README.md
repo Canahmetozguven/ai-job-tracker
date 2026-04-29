@@ -80,6 +80,12 @@ uv run python run_daily.py
 - **Performance sorting**: Fastest proxies first for optimal scraping
 - **Automatic refresh**: Fresh proxy list validated on each run
 
+### Automatic Proxy Scraping
+- **Multi-source**: ProxyScrape, Free Proxy List, GeoNode in chain
+- **Deduplication**: Removes duplicates across sources
+- **Incremental**: Appends to existing proxy list (preserves working pool)
+- **Graceful degradation**: Continues if one source fails
+
 ### Run Monitoring
 - **Comprehensive summaries**: Tracks proxy validation, scraping, and analysis stats
 - **Telegram reports**: Run summaries sent to Telegram after each cycle
@@ -138,7 +144,7 @@ Edit `profile.txt` with your CV as plain text. This is included in every Gemini 
 
 ### 6. Proxy List
 
-Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line). The `validate_proxies.py` script will test them and save working ones to `proxies/working.txt`.
+Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line). The `run_daily.py` script automatically validates proxies and selects a working one for each scraping cycle.
 
 ---
 
@@ -218,6 +224,22 @@ The daily runner:
 2. **Scrapes jobs** - Uses a random working proxy for JobSpy/LinkedIn
 3. **Analyzes jobs** - Sends each job to Gemini AI for scoring
 4. **Reports results** - Prints summary + sends to Telegram
+
+### Proxy Scraper
+
+Standalone tool to fetch fresh proxies from online sources:
+
+```bash
+# Scrape all sources
+python proxy_scraper.py
+
+# Scrape specific source only
+python proxy_scraper.py --source 1   # ProxyScrape
+python proxy_scraper.py --source 2   # Free Proxy List
+python proxy_scraper.py --source 3   # GeoNode
+```
+
+Proxies are appended to `proxies/proxyscrape_raw.txt`. `run_daily.py` automatically calls this before validation.
 
 ### Proxy Validator
 
@@ -357,6 +379,7 @@ After each `run_daily.py` cycle, a summary report:
 ├── run_daily.py          # Scheduler (scraper + analyzer)
 ├── scraper.py            # Job scraper
 ├── telegram_notify.py    # Telegram notifications
+├── proxy_scraper.py      # Auto-fetch proxies from online sources
 ├── user_profile.py       # CV loader
 ├── validate_proxies.py   # Proxy validator
 ├── jobs.jsonl            # Scraped jobs (generated)
