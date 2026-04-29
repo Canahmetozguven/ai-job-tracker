@@ -54,7 +54,37 @@ uv run python run_daily.py
 | `telegram_notify.py` | Sends formatted alerts to Telegram |
 | `gemini_client.py` | Browser automation for Gemini |
 | `config.py` | Central configuration |
+| `validate_proxies.py` | Tests proxies in parallel, saves working ones |
 | `profile.txt` | Your CV as plain text |
+
+---
+
+## Features
+
+### Job Scraping
+- **Multiple sources**: JobSpy (Indeed, LinkedIn, ZipRecruiter, Google) + LinkedIn-scraper
+- **Proxy rotation**: Automatic proxy selection from validated pool
+- **Freshness filter**: Only fetch jobs posted within last N hours
+- **Daemon mode**: Continuous scraping at configurable intervals
+- **Deduplication**: Avoids duplicate job entries
+
+### AI Analysis
+- **Gemini integration**: Browser automation for AI-powered job evaluation
+- **CV matching**: Compares job requirements against your profile
+- **Fit scoring**: 1-10 scale with recommendation (Apply/Review/Skip)
+- **Retry mechanism**: 3 retries with 30s delay on failures
+
+### Proxy Validation
+- **Parallel testing**: Tests 20 proxies concurrently
+- **Smart early exit**: Stops after collecting 50+ working proxies
+- **Performance sorting**: Fastest proxies first for optimal scraping
+- **Automatic refresh**: Fresh proxy list validated on each run
+
+### Run Monitoring
+- **Comprehensive summaries**: Tracks proxy validation, scraping, and analysis stats
+- **Telegram reports**: Run summaries sent to Telegram after each cycle
+- **Error tracking**: Collects and reports all failures
+- **Logging**: All activity logged to `cron.log`
 
 ---
 
@@ -106,6 +136,10 @@ BROWSER_PROFILE_PATH = "path/to/your/Brave/User Data"
 
 Edit `profile.txt` with your CV as plain text. This is included in every Gemini prompt.
 
+### 6. Proxy List
+
+Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line). The `validate_proxies.py` script will test them and save working ones to `proxies/working.txt`.
+
 ---
 
 ## Usage
@@ -139,6 +173,7 @@ uv run python scraper.py --source 3  # JobSpy → LinkedIn fallback
 | `--hours`, `-H` | `0` | Filter by age (hours), 0=disabled |
 | `--daemon`, `-d` | false | Run continuously |
 | `--interval`, `-i` | `30` | Minutes between scrapes (daemon mode) |
+| `--proxy` | random from pool | Specific proxy to use |
 
 ### Analyzer
 
@@ -164,18 +199,41 @@ uv run python analyzer.py --jobs jobs.jsonl --limit 5
 | `--hours` | `0` | Only analyze jobs from last N hours |
 | `--skip-seen` | false | Skip already-analyzed jobs |
 | `--chat-id` | from config | Telegram chat ID |
+| `--retries` | `3` | Max retries per job on Gemini failure |
 
 ### Daily Runner
 
-Combines scraper + analyzer in sequence with retry support:
+Combines scraper + analyzer in sequence with proxy validation and retry support:
 
 ```bash
 # Single run
 uv run python run_daily.py
 
 # For cron (runs every 30 minutes)
-*/30 * * * * cd /home/can/Desktop/job && /usr/bin/python3 run_daily.py >> cron.log 2>&1
+*/30 * * * * cd /home/can/Desktop/job && /home/can/Desktop/job/.venv/bin/python run_daily.py >> cron.log 2>&1
 ```
+
+The daily runner:
+1. **Validates proxies** - Tests `proxies/proxyscrape_raw.txt` and saves working ones
+2. **Scrapes jobs** - Uses a random working proxy for JobSpy/LinkedIn
+3. **Analyzes jobs** - Sends each job to Gemini AI for scoring
+4. **Reports results** - Prints summary + sends to Telegram
+
+### Proxy Validator
+
+Standalone tool to test and filter proxies:
+
+```bash
+python validate_proxies.py proxies/proxyscrape_raw.txt proxies/working.txt
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `input_file` | (required) | Raw proxy list |
+| `output_file` | (required) | Working proxies output |
+| `MAX_WORKERS` | `20` | Parallel test threads |
+| `MIN_WORKING` | `51` | Stop after this many working |
+| `TIMEOUT` | `8` | Seconds per proxy test |
 
 ---
 
@@ -213,11 +271,57 @@ Score meanings:
 
 ---
 
+## Telegram Notifications
+
+### Job Alerts
+Individual job analysis results sent as jobs are analyzed:
+```
+📋 Job Analysis
+
+🏢 Data Scientist at Acme
+📍 Remote
+🔗 https://...
+
+⭐ Fit Score: 8/10
+
+✅ Why Good:
+...
+
+❌ Why Bad:
+...
+
+📌 Recommendation: Apply
+```
+
+### Run Summary
+After each `run_daily.py` cycle, a summary report:
+```
+📊 Daily Job Scraper - Run Summary
+
+✅ Proxy Validation
+   Working: 51/238
+   Selected: `178.212.144.7:80`
+
+✅ Scraping
+   Found: 12
+   New: 12
+
+✅ Analysis
+   Processed: 12
+   Succeeded: 10
+   Failed: 2
+
+✅ SUCCESS
+```
+
+---
+
 ## Troubleshooting
 
 **Scraper returns 0 jobs**
 - Check proxy list: `proxies/working.txt`
 - LinkedIn may require session.json for authentication
+- Try with `--no-proxy` to test direct connection
 
 **Analyzer "No response received"**
 - Verify Gemini is accessible: https://gemini.google.com/app
@@ -232,6 +336,11 @@ Score meanings:
 **Browser won't launch**
 - Install/verify Brave path in `config.py`
 - On Linux: `sudo apt install brave-browser`
+
+**Proxy validation fails**
+- Check `proxies/proxyscrape_raw.txt` exists
+- Verify internet connection
+- Proxies may be blocked by the test URL
 
 ---
 
@@ -249,10 +358,13 @@ Score meanings:
 ├── scraper.py            # Job scraper
 ├── telegram_notify.py    # Telegram notifications
 ├── user_profile.py       # CV loader
+├── validate_proxies.py   # Proxy validator
 ├── jobs.jsonl            # Scraped jobs (generated)
 ├── analysis_results.jsonl # Analysis output
+├── cron.log              # Run logs (generated)
 ├── proxies/
-│   └── working.txt       # Working proxy list
+│   ├── proxyscrape_raw.txt # Raw proxy list (provide your own)
+│   └── working.txt         # Validated working proxies
 ├── tests/
 │   ├── test_analyzer.py
 │   └── test_scraper.py
@@ -270,7 +382,22 @@ For automatic hourly scraping + analysis:
 crontab -e
 
 # Add this line (runs every 30 minutes)
-*/30 * * * * cd /home/can/Desktop/job && /usr/bin/python3 run_daily.py >> cron.log 2>&1
+*/30 * * * * cd /home/can/Desktop/job && /home/can/Desktop/job/.venv/bin/python run_daily.py >> cron.log 2>&1
 ```
 
 Logs are written to `cron.log` in the project directory.
+
+---
+
+## Configuration
+
+Key settings in `config.py`:
+
+| Setting | Description |
+|---------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
+| `DEFAULT_CHAT_ID` | Your Telegram chat ID |
+| `BROWSER_PROFILE_PATH` | Path to Brave browser profile |
+| `PROFILE_FILE` | Path to your CV text file |
+| `JOBS_INPUT_FILE` | Default jobs file |
+| `ANALYSIS_OUTPUT_FILE` | Analysis results file |
