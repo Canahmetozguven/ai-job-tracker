@@ -1,16 +1,66 @@
-"""Gemini browser interaction via Playwright with Brave Nightly."""
+"""Gemini browser interaction via Playwright."""
 
-import asyncio
-from typing import Optional, Dict
+import os
+from pathlib import Path
+import shutil
 from playwright.async_api import async_playwright
 
+from config import PROMPT_TEMPLATE
 
-async def submit_to_gemini(browser_path: str, prompt: str) -> str:
+
+COMMON_BROWSER_COMMANDS = [
+    "brave-browser",
+    "brave-browser-stable",
+    "brave-browser-nightly",
+    "brave",
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+]
+
+
+def resolve_browser_executable(explicit_path: str | None = None) -> str | None:
+    """Resolve a browser executable path for Playwright.
+
+    If an explicit command or path is provided, resolve it directly. Otherwise,
+    try common browser commands on PATH. If none are available, return None so
+    Playwright uses its bundled Chromium (recommended for automation).
+    """
+    if explicit_path:
+        has_path_separator = os.path.sep in explicit_path or (
+            os.path.altsep is not None and os.path.altsep in explicit_path
+        )
+
+        if has_path_separator:
+            candidate = Path(explicit_path).expanduser()
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+            raise FileNotFoundError(
+                f"Configured browser executable path does not exist or is not executable: {explicit_path}"
+            )
+
+        resolved = shutil.which(explicit_path)
+        if resolved:
+            return resolved
+
+        raise FileNotFoundError(
+            f"Configured browser command not found on PATH: {explicit_path}"
+        )
+
+    # No explicit browser requested — prefer bundled Chromium (set executable_path
+    # to None so Playwright uses its shipped browser). External browsers like Brave
+    # often lack headless-mode support and are not recommended for automation.
+    return None
+
+
+async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: str | None = None) -> str:
     """Submit prompt to Gemini via browser.
 
     Args:
         browser_path: Path to Chrome/Brave profile directory
         prompt: Prompt text to submit
+        browser_executable: Optional browser executable path or command
 
     Returns:
         Gemini response text
@@ -19,18 +69,22 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
         Exception: If browser interaction fails
     """
     try:
+        executable_path = resolve_browser_executable(browser_executable)
         async with async_playwright() as p:
-            # Launch Brave with existing profile
-            context = await p.chromium.launch_persistent_context(
-                executable_path='/usr/bin/brave-browser',
-                user_data_dir=browser_path,
-                headless=True,
-                args=[
+            # Launch the selected browser with existing profile
+            launch_kwargs = {
+                "user_data_dir": browser_path,
+                "headless": True,
+                "args": [
                     '--no-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu'
                 ]
-            )
+            }
+            if executable_path:
+                launch_kwargs["executable_path"] = executable_path
+
+            context = await p.chromium.launch_persistent_context(**launch_kwargs)
 
             try:
                 page = context.pages[0] if context.pages else await context.new_page()
@@ -76,27 +130,7 @@ async def submit_to_gemini(browser_path: str, prompt: str) -> str:
 
 def build_prompt(profile: str, job: dict) -> str:
     """Build prompt from profile and job data."""
-    template = """Analyze this job posting for fit with my profile.
-
-MY PROFILE:
-{profile}
-
-JOB INFO:
-Title: {title}
-Company: {company}
-Location: {location}
-URL: {url}
-
-Description:
-{description}
-
-Respond with EXACTLY this format:
-1. FIT SCORE: X/10
-2. WHY GOOD: ...
-3. WHY BAD: ...
-4. RECOMMENDATION: Apply/Skip/Review"""
-
-    return template.format(
+    return PROMPT_TEMPLATE.format(
         profile=profile,
         title=job.get('title', 'N/A'),
         company=job.get('company', 'N/A'),

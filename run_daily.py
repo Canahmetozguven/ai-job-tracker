@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from config import TELEGRAM_BOT_TOKEN, DEFAULT_CHAT_ID
+from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
 import telegram_notify
 import telegram
 import proxy_scraper
@@ -28,7 +29,7 @@ run_summary = {
     "started_at": None,
     "proxy_validation": {"total": 0, "working": 0, "selected": None},
     "scrape": {"found": 0, "new": 0, "status": "not_run"},
-    "analyze": {"processed": 0, "succeeded": 0, "failed": 0, "status": "not_run"},
+    "analyze": {"processed": 0, "succeeded": 0, "failed": 0, "status": "not_run", "error_summary": None},
     "errors": [],
 }
 
@@ -84,12 +85,14 @@ def print_summary(send_tg: bool = True):
     # Analyze section
     an = run_summary["analyze"]
     if an["status"] != "not_run":
-        status_icon = "✓" if an["failed"] == 0 else ("⚠" if an["failed"] > 0 else "?")
+        status_icon = "✓" if an["status"] in ("success", "no_jobs") else ("⚠" if an["status"] == "partial" else "✗")
         print(f"  [{status_icon}] ANALYSIS")
         print(f"      Processed:   {an['processed']}")
         print(f"      Succeeded:  {an['succeeded']}")
         print(f"      Failed:      {an['failed']}")
         print(f"      Status:      {an['status'].upper()}")
+        if an.get("error_summary"):
+            print(f"      Summary:     {an['error_summary']}")
         print()
 
     # Errors section
@@ -100,10 +103,11 @@ def print_summary(send_tg: bool = True):
         print()
 
     # Overall status
+    analysis_ok = an["status"] in ("success", "no_jobs")
     all_ok = (
         pv["working"] > 0
         and sc["status"] in ("success", "partial")
-        and an["status"] != "failed"
+        and analysis_ok
     )
     print(f"  {'✓' if all_ok else '✗'} OVERALL: {'SUCCESS' if all_ok else 'ISSUES DETECTED'}")
     print_header("END OF RUN")
@@ -217,6 +221,7 @@ def main():
 
     # Step 3: Analyze
     print("\nStep 4: Analyzing new jobs...")
+    analysis_results_before = count_jsonl_lines("analysis_results.jsonl")
     analyze_ok = run_command([
         PYTHON, "analyzer.py",
         "--jobs", "jobs_linkedin.jsonl",
@@ -224,25 +229,14 @@ def main():
         "--skip-seen"
     ], "Analyzing jobs with Gemini")
 
-    if analyze_ok:
-        run_summary["analyze"]["status"] = "success"
-        # Try to get counts from analysis results
-        if os.path.exists("analysis_results.jsonl"):
-            with open("analysis_results.jsonl") as f:
-                results = f.readlines()
-            run_summary["analyze"]["processed"] = len(results)
-            # Count successes vs failures
-            succeeded = 0
-            failed = 0
-            for line in results:
-                if '"error"' in line:
-                    failed += 1
-                else:
-                    succeeded += 1
-            run_summary["analyze"]["succeeded"] = succeeded
-            run_summary["analyze"]["failed"] = failed
-    else:
-        run_summary["analyze"]["status"] = "failed"
+    new_analysis_results = read_jsonl_records("analysis_results.jsonl", analysis_results_before)
+    analysis_summary = summarize_analysis_results(new_analysis_results, analyze_ok)
+    run_summary["analyze"].update(analysis_summary)
+
+    if analysis_summary.get("error_summary"):
+        run_summary["errors"].append(analysis_summary["error_summary"])
+
+    if not analyze_ok:
         run_summary["errors"].append("Analysis failed")
 
     print_summary()

@@ -90,10 +90,17 @@ def parse_gemini_response(response_text: str) -> dict:
     if why_bad_match:
         result['why_bad'] = why_bad_match.group(1).strip()
 
-    # Extract recommendation
-    rec_match = re.search(r'RECOMMENDATION:\s*(Apply|Skip|Review)', response_text, re.IGNORECASE)
+    # Extract recommendation, preserving an optional short next step after the action.
+    rec_match = re.search(
+        r'RECOMMENDATION:\s*((Apply|Skip|Review)\b[^\n]*)',
+        response_text,
+        re.IGNORECASE,
+    )
     if rec_match:
-        result['recommendation'] = rec_match.group(1).strip()
+        recommendation_text = rec_match.group(1).strip()
+        action = rec_match.group(2).capitalize()
+        remainder = recommendation_text[len(rec_match.group(2)):].strip()
+        result['recommendation'] = f"{action} {remainder}".strip()
 
     return result
 
@@ -129,12 +136,23 @@ def format_run_summary(summary: dict) -> str:
     # Analyze section
     an = summary.get("analyze", {})
     if an.get("status") != "not_run":
-        status_map = {"success": "✅", "partial": "⚠️", "failed": "❌", "skipped": "⏭️"}
+        status_map = {
+            "success": "✅",
+            "partial": "⚠️",
+            "failed": "❌",
+            "skipped": "⏭️",
+            "no_jobs": "✅",
+        }
         status = status_map.get(an.get("status", "not_run"), "➖")
         lines.append(f"{status} *Analysis*")
+        lines.append(f"   Status: {str(an.get('status', 'not_run')).upper()}")
+        if an.get("status") == "no_jobs":
+            lines.append("   Heartbeat: No new jobs to analyze; cron is still running.")
         lines.append(f"   Processed: {an.get('processed', 0)}")
         lines.append(f"   Succeeded: {an.get('succeeded', 0)}")
         lines.append(f"   Failed: {an.get('failed', 0)}")
+        if an.get("error_summary"):
+            lines.append(f"   Summary: {an['error_summary']}")
         lines.append("")
 
     # Errors section
@@ -146,10 +164,11 @@ def format_run_summary(summary: dict) -> str:
         lines.append("")
 
     # Overall status
+    analysis_ok = an.get("status") in ("success", "no_jobs")
     all_ok = (
         pv.get("working", 0) > 0
         and sc.get("status") in ("success", "partial")
-        and an.get("status") != "failed"
+        and analysis_ok
     )
     overall = "✅ *SUCCESS*" if all_ok else "❌ *ISSUES DETECTED*"
     lines.append(overall)

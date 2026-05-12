@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from config import (
     TELEGRAM_BOT_TOKEN,
     BROWSER_PROFILE_PATH,
+    GEMINI_BROWSER_EXECUTABLE,
     PROFILE_FILE,
     JOBS_INPUT_FILE,
     ANALYSIS_OUTPUT_FILE,
@@ -18,6 +19,7 @@ from user_profile import load_profile
 from job_loader import load_jobs
 from telegram_notify import send_message, format_job_analysis, parse_gemini_response
 from gemini_client import submit_to_gemini, build_prompt
+from analysis_validation import is_valid_analysis
 
 # Setup logging to cron.log
 logging.basicConfig(
@@ -34,22 +36,33 @@ CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds
 
-def get_seen_urls(results_file: str) -> set:
-    """Get URLs of already analyzed jobs."""
-    seen = set()
+def get_seen_urls(results_file: str) -> set[str]:
+    """Get URLs of jobs with successful analysis records only.
+
+    Error records and records without a structured analysis object are ignored,
+    so --skip-seen only skips jobs that were successfully analyzed before.
+    """
+    seen_urls: set[str] = set()
     try:
         with open(results_file) as f:
             for line in f:
                 try:
-                    job = json.loads(line).get('job', {})
+                    record = json.loads(line)
+                    if not isinstance(record, dict):
+                        continue
+                    if 'error' in record or not is_valid_analysis(record.get('analysis')):
+                        continue
+                    job = record.get('job', {})
+                    if not isinstance(job, dict):
+                        continue
                     url = job.get('job_url')
                     if url:
-                        seen.add(url)
+                        seen_urls.add(url)
                 except json.JSONDecodeError:
                     continue
     except FileNotFoundError:
         pass
-    return seen
+    return seen_urls
 
 def filter_recent_jobs(jobs: list, hours: int) -> list:
     """Filter jobs posted within last N hours."""
@@ -74,7 +87,14 @@ def filter_recent_jobs(jobs: list, hours: int) -> list:
             filtered.append(job)
     return filtered
 
-async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, max_retries: int = 3) -> dict:
+async def analyze_job(
+    job: dict,
+    profile: str,
+    chat_id: str,
+    browser_path: str,
+    max_retries: int = 3,
+    browser_executable: str | None = None,
+) -> dict:
     """Analyze single job with Gemini and send to Telegram.
 
     Args:
@@ -83,6 +103,7 @@ async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, 
         chat_id: Telegram chat ID
         browser_path: Path to browser profile
         max_retries: Number of retry attempts for Gemini failures
+        browser_executable: Optional browser executable path for Gemini
 
     Returns:
         Analysis result dict
@@ -94,7 +115,7 @@ async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, 
     last_error = None
     for attempt in range(max_retries):
         try:
-            response = await submit_to_gemini(browser_path, prompt)
+            response = await submit_to_gemini(browser_path, prompt, browser_executable=browser_executable)
             if response and response != "No response received" and not response.startswith("Gemini şunu dedi:No response"):
                 break
             last_error = f"Empty response from Gemini (attempt {attempt + 1}/{max_retries})"
@@ -109,6 +130,13 @@ async def analyze_job(job: dict, profile: str, chat_id: str, browser_path: str, 
         raise Exception(f"Gemini failed after {max_retries} attempts: {last_error}")
     
     analysis = parse_gemini_response(response)
+    if not is_valid_analysis(analysis):
+        response_excerpt = " ".join(response.split())[:200]
+        raise Exception(
+            "Gemini response missing required analysis fields. "
+            f"Response excerpt: {response_excerpt}"
+        )
+
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
     try:
@@ -135,9 +163,14 @@ async def main():
     parser.add_argument("--jobs", default=JOBS_INPUT_FILE, help="Jobs input file")
     parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
     parser.add_argument("--browser-path", default=BROWSER_PROFILE_PATH, help="Browser profile path")
+    parser.add_argument(
+        "--browser-executable",
+        default=GEMINI_BROWSER_EXECUTABLE,
+        help="Optional browser executable for Gemini; falls back to common browsers or bundled Chromium",
+    )
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
     parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
-    parser.add_argument("--skip-seen", action="store_true", help="Skip already analyzed jobs")
+    parser.add_argument("--skip-seen", action="store_true", help="Skip jobs with successful analysis already recorded")
     parser.add_argument("--retries", type=int, default=MAX_RETRIES, help="Max retries per job on Gemini failure")
     args = parser.parse_args()
 
@@ -174,7 +207,14 @@ async def main():
     for i, job in enumerate(jobs):
         print(f"\n[{i+1}/{len(jobs)}] Analyzing: {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}")
         try:
-            result = await analyze_job(job, profile, CHAT_ID, args.browser_path, args.retries)
+            result = await analyze_job(
+                job,
+                profile,
+                CHAT_ID,
+                args.browser_path,
+                args.retries,
+                args.browser_executable,
+            )
             save_result(result, args.output)
             success_count += 1
             print(f"  ✓ Done - Score: {result['analysis'].get('score', 'N/A')}")

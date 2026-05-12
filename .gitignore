@@ -14,3 +14,8 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Runtime data / sensitive artifacts
+analysis_results.jsonl
+jobs_linkedin.jsonl
+USER_INFO_BACKUP_DESKTOP-MR1KOEH/
