@@ -138,6 +138,25 @@ def test_build_prompt_uses_actionable_shortlist_guidance():
     assert 'Apply | Review | Skip' not in prompt
 
 
+def test_build_prompt_data_role_boost_must_score_at_least_6():
+    prompt = build_prompt(
+        'Python developer with AWS and Django experience',
+        {
+            'title': 'Data Engineer',
+            'company': 'Acme',
+            'location': 'Remote',
+            'job_url': 'https://example.com/job/data-eng',
+            'description': 'Build data pipelines with Python and SQL.',
+        },
+    )
+
+    # Data-role boost must be a hard floor, not a soft suggestion
+    assert 'MUST score it 6+/10' in prompt or 'must score it 6+' in prompt.lower()
+    # Data Science exception floor should be 6 minimum
+    assert 'Data Science priority' in prompt or 'data science priority' in prompt.lower()
+    assert 'never go below 6+/10' in prompt.lower() or 'mandatory minimum floor' in prompt.lower()
+
+
 def test_build_prompt_truncates_description_to_2000_chars():
     prompt = build_prompt(
         'Profile',

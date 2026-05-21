@@ -76,8 +76,8 @@ Description:
 
 Guidance:
 - Score fit strictly using evidence from the profile and description only. Do not inflate scores for vague overlap.
-- **Data-role boost:** For any job whose title contains one of the following, score it 6+/10 even if tangentially related: data engineer, data analyst, analytics, BI analyst, business analyst, ML engineer, ML ops, AI engineer, LLM engineer, deep learning, NLP engineer, data infrastructure, ETL/data warehouse, data platform, BI engineer.
-- **Data Science priority:** If the job title contains "Data Science" or "Data Scientist", base the score at 9/10 or 10/10. **Exception:** If hard dealbreakers exist, reduce score accordingly and flag them prominently in WHY BAD. The score should still reflect the data science priority but not ignore logistical red flags.
+- **Data-role boost:** For any job whose title contains one of the following, you MUST score it 6+/10 even if only loosely or tangentially related. This is a mandatory floor, not a suggestion: data engineer, data analyst, analytics, BI analyst, business analyst, ML engineer, ML ops, AI engineer, LLM engineer, deep learning, NLP engineer, data infrastructure, ETL/data warehouse, data platform, BI engineer.
+- **Data Science priority:** If the job title contains "Data Science" or "Data Scientist", score it 9/10 or 10/10. **Exception:** If hard dealbreakers exist, reduce the score but never go below 6+/10 — this is a mandatory minimum floor. Always flag dealbreakers prominently in WHY BAD.
 - **Strategic Edge:** Flag in WHY GOOD if the role involves HealthTech, behavioral analytics, LLM integration, or international/remote setups where my unique background is an asset.
 - Make WHY GOOD concise: short bullets or phrases explaining why this is worth applying to now.
 - Make WHY BAD concise: include gaps, dealbreakers, mandatory language requirements, visa/relocation hurdles, or missing tech stacks.
