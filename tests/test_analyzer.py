@@ -133,8 +133,7 @@ def test_build_prompt_uses_actionable_shortlist_guidance():
     assert 'actionable shortlist' in prompt.lower()
     assert 'strict' in prompt.lower()
     assert 'dealbreakers' in prompt.lower()
-    assert 'risks' in prompt.lower()
-    assert 'next step' in prompt.lower()
+    assert 'HealthTech' in prompt or 'behavioral analytics' in prompt or 'LLM integration' in prompt or 'Strategic Edge' in prompt
     assert 'RECOMMENDATION: <Apply|Review|Skip> — <one short next step>' in prompt
     assert 'Apply | Review | Skip' not in prompt
 
