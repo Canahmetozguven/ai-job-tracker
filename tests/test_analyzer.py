@@ -242,6 +242,34 @@ def test_resolve_browser_executable_accepts_explicit_executable_path(tmp_path):
     assert resolve_browser_executable(str(executable)) == str(executable)
 
 
+def test_analyze_job_skips_jobs_below_score_threshold(mocker):
+    """Jobs with score < 6 should not be sent to Telegram."""
+    import analyzer as a_module
+    import asyncio
+    from unittest.mock import MagicMock
+
+    async def mock_submit(*args, **kwargs):
+        return "FIT SCORE: 4/10\nWHY GOOD: Python match\nWHY BAD: Low salary\nRECOMMENDATION: Skip"
+
+    send_message_mock = MagicMock()
+
+    mocker.patch("gemini_client.submit_to_gemini", mock_submit)
+    mocker.patch("telegram_notify.send_message", send_message_mock)
+
+    job = {
+        "title": "Junior Dev",
+        "company": "Small Co",
+        "job_url": "https://example.com/job-skipped",
+    }
+
+    result = asyncio.run(
+        a_module.analyze_job(job, "Python dev", "123", "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data", 3, None)
+    )
+
+    assert result["analysis"]["score"].endswith("/10")
+    assert send_message_mock.call_count == 0, "send_message should not be called for score below threshold"
+
+
 def test_resolve_browser_executable_returns_none_by_default_for_automation(monkeypatch):
     """Without an explicit browser, resolver returns None so Playwright uses bundled Chromium.
 

@@ -137,6 +137,20 @@ async def analyze_job(
             f"Response excerpt: {response_excerpt}"
         )
 
+    # Only send to Telegram if score >= 6
+    score_str = analysis.get("score", "0/10")
+    try:
+        score_val = int(score_str.split("/")[0])
+    except (ValueError, IndexError):
+        score_val = 0
+    if score_val < 6:
+        print(f"  ⏭ Skipped — score {score_val}/10 below threshold")
+        return {
+            'job': job,
+            'analysis': analysis,
+            'gemini_response': response
+        }
+
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
     try:
