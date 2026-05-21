@@ -154,6 +154,34 @@ def test_build_prompt_truncates_description_to_2000_chars():
     assert prompt.count('~') == 2000
 
 
+def test_build_prompt_boosts_scores_for_data_related_roles():
+    """Data-related roles (data engineer, ML engineer, analyst, etc.) should get
+    score 6+ even if only slightly related to the profile."""
+    from config import PROMPT_TEMPLATE
+
+    # Check guidance section of PROMPT_TEMPLATE directly
+    lower_template = PROMPT_TEMPLATE.lower()
+    # Should mention data-related job categories
+    data_keywords = [
+        'data engineer',
+        'data analyst',
+        'data scientist',
+        'ml engineer',
+        'mlops',
+        'ai engineer',
+        'analytics',
+        'bi analyst',
+    ]
+    found = [kw for kw in data_keywords if kw in lower_template]
+    assert found, f"PROMPT_TEMPLATE should mention data-related roles. None found in template."
+
+    # Should instruct Gemini to score data roles 6+ even if slightly related
+    assert '6+' in PROMPT_TEMPLATE or '6 / 10' in PROMPT_TEMPLATE or 'score 6' in lower_template, (
+        "PROMPT_TEMPLATE should instruct Gemini to score data-related roles 6+ "
+        "when even slightly related."
+    )
+
+
 def test_get_seen_urls_only_includes_successful_analysis_records(tmp_path):
     results = tmp_path / "analysis_results.jsonl"
     results.write_text(

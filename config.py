@@ -47,6 +47,7 @@ Guidance:
 - RECOMMENDATION must be exactly one of Apply, Review, or Skip. Add one short next step after the keyword if possible, like "Apply — tailor resume" or "Review — confirm salary".
 - Keep the response brief and Telegram-friendly.
 - Do not use JSON or extra headings.
+- **Data-role boost**: For any job whose title contains or strongly matches one of the following, score it 6+/10 even if only loosely or tangentially related: data engineer, data analyst, analytics, BI analyst, business analyst, data scientist, ML engineer, ML ops, AI engineer, LLM engineer, deep learning, NLP engineer, data infrastructure, ETL/data warehouse, data platform, BI engineer. If the job title does not match any of these, apply the strict scoring rule above.
 
 Respond with EXACTLY this format and choose only one recommendation action:
 FIT SCORE: X/10
