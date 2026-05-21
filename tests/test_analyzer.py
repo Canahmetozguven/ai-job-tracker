@@ -156,7 +156,8 @@ def test_build_prompt_truncates_description_to_2000_chars():
 
 def test_build_prompt_boosts_scores_for_data_related_roles():
     """Data-related roles (data engineer, ML engineer, analyst, etc.) should get
-    score 6+ even if only slightly related to the profile."""
+    score 6+ even if only slightly related to the profile. Data science roles
+    specifically should get 10/10."""
     from config import PROMPT_TEMPLATE
 
     # Check guidance section of PROMPT_TEMPLATE directly
@@ -179,6 +180,11 @@ def test_build_prompt_boosts_scores_for_data_related_roles():
     assert '6+' in PROMPT_TEMPLATE or '6 / 10' in PROMPT_TEMPLATE or 'score 6' in lower_template, (
         "PROMPT_TEMPLATE should instruct Gemini to score data-related roles 6+ "
         "when even slightly related."
+    )
+
+    # Should specifically boost data science to 10/10
+    assert 'data science' in lower_template and '10' in PROMPT_TEMPLATE, (
+        "PROMPT_TEMPLATE should explicitly set data science roles to 10/10."
     )
 
 

@@ -48,6 +48,7 @@ Guidance:
 - Keep the response brief and Telegram-friendly.
 - Do not use JSON or extra headings.
 - **Data-role boost**: For any job whose title contains or strongly matches one of the following, score it 6+/10 even if only loosely or tangentially related: data engineer, data analyst, analytics, BI analyst, business analyst, data scientist, ML engineer, ML ops, AI engineer, LLM engineer, deep learning, NLP engineer, data infrastructure, ETL/data warehouse, data platform, BI engineer. If the job title does not match any of these, apply the strict scoring rule above.
+- **Data science is always 10/10**: If the job title or role explicitly contains "data science" or "data scientist", score it 10/10 — this is always a top-priority match regardless of how the description is written.
 
 Respond with EXACTLY this format and choose only one recommendation action:
 FIT SCORE: X/10
