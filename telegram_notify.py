@@ -145,7 +145,7 @@ def format_run_summary(summary: dict) -> str:
         }
         status = status_map.get(an.get("status", "not_run"), "➖")
         lines.append(f"{status} *Analysis*")
-        lines.append(f"   Status: {str(an.get('status', 'not_run')).upper()}")
+        lines.append(f"   Status: {str(an.get('status', 'not_run')).upper().replace('_', ' ')}")
         if an.get("status") == "no_jobs":
             lines.append("   Heartbeat: No new jobs to analyze; cron is still running.")
         lines.append(f"   Processed: {an.get('processed', 0)}")
