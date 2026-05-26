@@ -21,12 +21,12 @@ from telegram_notify import send_message, format_job_analysis, parse_gemini_resp
 from gemini_client import submit_to_gemini, build_prompt
 from analysis_validation import is_valid_analysis
 
-# Setup logging to cron.log
+# Setup logging to cron.log (append mode to preserve all runs)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('cron.log', mode='w'),
+        logging.FileHandler('cron.log', mode='a'),
         logging.StreamHandler()
     ]
 )
