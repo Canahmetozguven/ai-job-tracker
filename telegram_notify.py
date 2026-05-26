@@ -121,7 +121,7 @@ def format_run_summary(summary: dict) -> str:
     lines.append(f"{status} *Proxy Validation*")
     lines.append(f"   Working: {pv.get('working', 0)}/{pv.get('total', '?')}")
     if pv.get("selected"):
-        lines.append(f"   Selected: `{pv['selected']}`")
+        lines.append(f"   Selected: {pv['selected']}")
     lines.append("")
 
     # Scrape section
