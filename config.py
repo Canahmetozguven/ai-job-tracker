@@ -90,3 +90,30 @@ FIT SCORE: X/10
 WHY GOOD: ...
 WHY BAD: ...
 RECOMMENDATION: <Apply|Review|Skip> — <one short next step>"""
+
+
+# Big Tech 7 — top tech companies frequently hiring data scientists globally.
+# Match is case-insensitive substring against the company field. Keys are the
+# canonical company name; values are aliases that map to that company.
+BIG_TECH_COMPANIES: dict[str, list[str]] = {
+    "Apple":     ["Apple", "Apple Inc"],
+    "Microsoft": ["Microsoft", "Microsoft Corporation"],
+    "Google":    ["Google", "Alphabet", "YouTube", "Waymo", "DeepMind", "Google LLC"],
+    "Amazon":    ["Amazon", "Amazon Web Services", "AWS"],
+    "Meta":      ["Meta", "Meta Platforms", "Facebook"],
+    "Nvidia":    ["Nvidia", "NVIDIA", "Nvidia Corporation"],
+    "Tesla":     ["Tesla", "Tesla Motors"],
+}
+
+def match_big_tech(company: str | None) -> str | None:
+    """Return canonical Big Tech company name if `company` matches an alias, else None.
+
+    Case-insensitive substring match. None and empty string return None.
+    """
+    if not company:
+        return None
+    company_lower = company.lower()
+    for canonical, aliases in BIG_TECH_COMPANIES.items():
+        if any(alias.lower() in company_lower for alias in aliases):
+            return canonical
+    return None
