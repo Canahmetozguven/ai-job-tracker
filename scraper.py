@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import json
+import math
 import os
 import random
 import sys
@@ -49,6 +50,7 @@ def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0
         "location": location,
         "results_wanted": limit,
         "verbose": 1,
+        "linkedin_fetch_description": True,
     }
     if hours_old > 0:
         kwargs["hours_old"] = hours_old
@@ -64,22 +66,46 @@ def scrape_with_jobspy(query: str, location: str, limit: int, hours_old: int = 0
         print(f"  JobSpy error: {e}")
         return []
 
+def _clean(value):
+    """Coerce pandas NaN/None/NaT to None; leave other values alone.
+
+    `json.dumps` writes `NaN` for floats by default, producing illegal JSON.
+    Normalize here so all downstream consumers (analyzer, prompts, Telegram)
+    receive plain Python types.
+    """
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
 def df_to_job_records(df) -> list[dict]:
     """Convert pandas DataFrame to list of job dicts."""
     if df.empty:
         return []
     records = []
     for _, row in df.iterrows():
+        # Preserve the original date_posted semantics: any non-parseable
+        # string falls through to the "include job" branch in
+        # filter_recent_jobs. A missing/NaN cell becomes the literal
+        # "unknown" so the job is treated as "date not parseable" and kept.
+        date_cell = row.get("date_posted")
+        if date_cell is None or (isinstance(date_cell, float) and math.isnan(date_cell)):
+            date_posted = "unknown"
+        else:
+            date_posted = str(date_cell)
+
         record = {
-            "title": row.get("title"),
-            "company": row.get("company"),
-            "location": row.get("location"),
-            "job_url": row.get("job_url"),
-            "description": row.get("description"),
-            "date_posted": str(row.get("date_posted", "")),
-            "job_type": row.get("job_type"),
+            "title": _clean(row.get("title")),
+            "company": _clean(row.get("company")),
+            "location": _clean(row.get("location")),
+            "job_url": _clean(row.get("job_url")),
+            "description": _clean(row.get("description")),
+            "date_posted": date_posted,
+            "job_type": _clean(row.get("job_type")),
             "salary": None,
-            "source": row.get("site_name", "unknown"),
+            "source": row.get("site", "unknown"),
             "is_remote": bool(row.get("is_remote")) if "is_remote" in row else None,
         }
         if row.get("min_amount") or row.get("max_amount"):

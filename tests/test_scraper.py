@@ -1,5 +1,6 @@
+import math
 import pytest
-from scraper import deduplicate_jobs
+from scraper import deduplicate_jobs, df_to_job_records, _clean
 
 def test_deduplicate_jobs():
     jobs = [
@@ -36,3 +37,66 @@ def test_deduplicate_jobs_no_url():
     ]
     result = deduplicate_jobs(jobs)
     assert len(result) == 2
+
+
+def test_clean_strips_nan_float():
+    """Regression: NaN floats must become None so json.dumps stays valid."""
+    assert _clean(float("nan")) is None
+    assert _clean(None) is None
+    assert _clean("hello") == "hello"
+    assert _clean(42) == 42
+
+
+def test_df_to_job_records_preserves_nan_date_as_string():
+    """Regression: analyzer's recent filter relies on date_posted being a
+    non-empty string for jobs whose date is unknown. A missing/NaN cell
+    must become a non-empty, unparseable string so the filter's
+    parse-failure fallback keeps the job."""
+    class _Row(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    df = type("DF", (), {"empty": False, "iterrows": lambda self: iter([(0, _Row({
+        "title": "T", "company": "C", "location": "L", "job_url": "u",
+        "description": None, "date_posted": float("nan"), "job_type": None,
+        "min_amount": None, "max_amount": None, "currency": "USD",
+        "site": "linkedin", "is_remote": False,
+    }))])})()
+
+    records = df_to_job_records(df)
+    assert len(records) == 1
+    # The exact placeholder string isn't load-bearing — only that the
+    # resulting value is a non-empty, non-parseable string so the analyzer
+    # filter keeps the job.
+    assert isinstance(records[0]["date_posted"], str)
+    assert records[0]["date_posted"]  # non-empty
+    assert records[0]["description"] is None
+    assert records[0]["job_type"] is None
+
+
+def test_df_to_job_records_keeps_job_when_date_column_missing():
+    """Regression: JobSpy sometimes omits date_posted entirely. The row
+    accessor returns None for a missing key, which must not silently drop
+    the job from the analyzer's recent filter."""
+    class _Row(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    df = type("DF", (), {"empty": False, "iterrows": lambda self: iter([(0, _Row({
+        "title": "T", "company": "C", "location": "L", "job_url": "u",
+        "description": None, "job_type": None,
+        "min_amount": None, "max_amount": None, "currency": "USD",
+        "site": "linkedin", "is_remote": False,
+    }))])})()
+
+    records = df_to_job_records(df)
+    assert len(records) == 1
+    assert isinstance(records[0]["date_posted"], str) and records[0]["date_posted"]
+
+
+def test_df_to_job_records_handles_empty_dataframe():
+    class _EmptyDF:
+        empty = True
+        def iterrows(self):
+            return iter([])
+    assert df_to_job_records(_EmptyDF()) == []

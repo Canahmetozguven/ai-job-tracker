@@ -172,6 +172,37 @@ def test_build_prompt_truncates_description_to_2000_chars():
     assert prompt.count('~') == 2000
 
 
+def test_build_prompt_handles_nan_description():
+    """Regression: NaN floats in description must not crash slicing."""
+    # NaN is a float and is truthy, so `or 'N/A'` won't save us. The function
+    # must coerce it to a string first.
+    prompt = build_prompt(
+        'Profile',
+        {
+            'title': 'Role',
+            'company': 'Company',
+            'location': 'Remote',
+            'job_url': 'https://example.com/job/nan',
+            'description': float('nan'),
+        },
+    )
+    assert 'NaN' in prompt or 'N/A' in prompt
+    assert prompt  # non-empty
+
+
+def test_load_jobs_sanitizes_nan_values(tmp_path):
+    """Existing jsonl files may contain NaN from previous bad runs."""
+    path = tmp_path / "jobs.jsonl"
+    # Use json.dumps with allow_nan=True (the default) to reproduce the bug.
+    path.write_text(
+        '{"title": "T", "description": NaN, "job_type": NaN, "date_posted": "None"}\n'
+    )
+    jobs = list(load_jobs(str(path)))
+    assert len(jobs) == 1
+    assert jobs[0]['description'] is None
+    assert jobs[0]['job_type'] is None
+
+
 def test_build_prompt_boosts_scores_for_data_related_roles():
     """Data-related roles (data engineer, ML engineer, analyst, etc.) should get
     score 6+ even if only slightly related to the profile. Data science roles

@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 import shutil
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Error as PlaywrightError
 
 from config import PROMPT_TEMPLATE
 
@@ -107,14 +107,12 @@ async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: s
                 # Wait for response
                 await page.wait_for_timeout(20000)
 
-                # Extract response
-                try:
-                    response_elem = page.locator(".response-content")
-                    if await response_elem.count() > 0:
-                        response = await response_elem.first.text_content()
-                    else:
-                        response = "No response received"
-                except:
+                # Extract response. If the locator fails to find a node, treat
+                # it as "no response" rather than crashing the whole submission.
+                response_elem = page.locator(".response-content")
+                if await response_elem.count() > 0:
+                    response = await response_elem.first.text_content()
+                else:
                     response = "No response received"
 
                 return response
@@ -122,19 +120,37 @@ async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: s
             finally:
                 await context.close()
 
-    except ImportError:
-        raise Exception("Playwright not installed. Run: uv pip install playwright")
-    except Exception as e:
-        raise Exception(f"Gemini interaction failed: {e}")
+    except ImportError as e:
+        raise ImportError("Playwright not installed. Run: uv pip install playwright") from e
+    except (PlaywrightError, OSError, TimeoutError) as e:
+        # Playwright/network/browser-level failures: surface as a single typed
+        # exception so the retry loop in analyze_job can decide what to do.
+        raise RuntimeError(f"Gemini interaction failed: {e}") from e
+
+
+def _description_to_text(value) -> str:
+    """Coerce a description value to a string suitable for slicing.
+
+    NaN values (floats) from pandas can sneak into job dicts; treat any
+    non-string as missing so we don't crash on `value[:2000]`.
+    """
+    if value is None:
+        return 'N/A'
+    if isinstance(value, str):
+        return value
+    if isinstance(value, float):
+        # NaN is a float and is truthy, so `or 'N/A'` would not save us.
+        return 'N/A'
+    return str(value)
 
 
 def build_prompt(profile: str, job: dict) -> str:
     """Build prompt from profile and job data."""
     return PROMPT_TEMPLATE.format(
         profile=profile,
-        title=job.get('title', 'N/A'),
-        company=job.get('company', 'N/A'),
-        location=job.get('location', 'N/A'),
-        url=job.get('job_url', 'N/A'),
-        description=(job.get('description') or 'N/A')[:2000]
+        title=job.get('title', 'N/A') or 'N/A',
+        company=job.get('company', 'N/A') or 'N/A',
+        location=job.get('location', 'N/A') or 'N/A',
+        url=job.get('job_url', 'N/A') or 'N/A',
+        description=_description_to_text(job.get('description'))[:2000]
     )

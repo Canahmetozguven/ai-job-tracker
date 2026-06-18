@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
@@ -62,14 +63,15 @@ def fetch_proxyscrape() -> list[str]:
 
     try:
         body = _fetch_text(PROXYSCRAPE_URL)
-        proxies: list[str] = []
-        for line in body.splitlines():
-            proxy = _normalize_proxy(line)
-            if proxy:
-                proxies.append(proxy)
-        return proxies
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"  proxyscrape fetch failed: {e}")
         return []
+    proxies: list[str] = []
+    for line in body.splitlines():
+        proxy = _normalize_proxy(line)
+        if proxy:
+            proxies.append(proxy)
+    return proxies
 
 
 class _FreeProxyListParser(HTMLParser):
@@ -128,19 +130,20 @@ def fetch_free_proxy_list() -> list[str]:
 
     try:
         html = _fetch_text(FREE_PROXY_LIST_URL)
-        parser = _FreeProxyListParser()
-        parser.feed(html)
-
-        proxies: list[str] = []
-        for row in parser.rows:
-            if len(row) < 2:
-                continue
-            proxy = _normalize_proxy(f"{row[0]}:{row[1]}")
-            if proxy:
-                proxies.append(proxy)
-        return proxies
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"  free-proxy-list fetch failed: {e}")
         return []
+    parser = _FreeProxyListParser()
+    parser.feed(html)
+
+    proxies: list[str] = []
+    for row in parser.rows:
+        if len(row) < 2:
+            continue
+        proxy = _normalize_proxy(f"{row[0]}:{row[1]}")
+        if proxy:
+            proxies.append(proxy)
+    return proxies
 
 
 def _extract_geonode_items(payload: Any) -> list[dict[str, Any]]:
@@ -161,20 +164,25 @@ def fetch_geonode() -> list[str]:
 
     try:
         raw = _fetch_text(GEONODE_URL)
-        payload = json.loads(raw)
-        proxies: list[str] = []
-        for item in _extract_geonode_items(payload):
-            if "proxy" in item:
-                proxy = _normalize_proxy(str(item.get("proxy")))
-            else:
-                host = item.get("ip") or item.get("ipAddress") or item.get("host")
-                port = item.get("port") or item.get("proxyPort") or item.get("port_number")
-                proxy = _normalize_proxy(f"{host}:{port}") if host and port else None
-            if proxy:
-                proxies.append(proxy)
-        return proxies
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"  geonode fetch failed: {e}")
         return []
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"  geonode JSON decode failed: {e}")
+        return []
+    proxies: list[str] = []
+    for item in _extract_geonode_items(payload):
+        if "proxy" in item:
+            proxy = _normalize_proxy(str(item.get("proxy")))
+        else:
+            host = item.get("ip") or item.get("ipAddress") or item.get("host")
+            port = item.get("port") or item.get("proxyPort") or item.get("port_number")
+            proxy = _normalize_proxy(f"{host}:{port}") if host and port else None
+        if proxy:
+            proxies.append(proxy)
+    return proxies
 
 
 def deduplicate(proxies: list[str]) -> list[str]:
@@ -193,21 +201,29 @@ def deduplicate(proxies: list[str]) -> list[str]:
 def save_proxies(proxies: list[str], path: str) -> int:
     """Append new unique proxies to ``path`` and return the count written."""
 
+    output = Path(path)
     try:
-        output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"  cannot create proxy dir: {e}")
+        return 0
 
-        existing: set[str] = set()
-        if output.exists():
-            try:
-                existing = {
-                    proxy
-                    for proxy in (_normalize_proxy(line) for line in output.read_text().splitlines())
-                    if proxy
-                }
-            except Exception:
-                existing = set()
+    # Reading the existing file is best-effort: a corrupt or partially-written
+    # file should not stop us from appending new proxies. We treat any I/O or
+    # decode error as "no prior content".
+    existing: set[str] = set()
+    if output.exists():
+        try:
+            existing = {
+                proxy
+                for proxy in (_normalize_proxy(line) for line in output.read_text(encoding="utf-8").splitlines())
+                if proxy
+            }
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"  could not read existing proxies ({e}); appending blindly")
+            existing = set()
 
+    try:
         written = 0
         new_proxies = deduplicate(proxies)
         with output.open("a", encoding="utf-8") as handle:
@@ -218,7 +234,8 @@ def save_proxies(proxies: list[str], path: str) -> int:
                 existing.add(proxy)
                 written += 1
         return written
-    except Exception:
+    except OSError as e:
+        print(f"  could not write proxies: {e}")
         return 0
 
 

@@ -1,7 +1,26 @@
 """Job loader from JSON Lines file."""
 
 import json
+import math
 from typing import Iterator, Dict
+
+
+def _sanitize(value):
+    """Strip NaN floats that may have leaked in from a previous scraper run.
+
+    Python's ``json`` accepts the literal ``NaN`` (a float) and round-trips it
+    through ``json.dumps`` as ``NaN`` (illegal JSON). We normalize any float
+    NaN to ``None`` so downstream code can use ``or 'N/A'`` patterns safely
+    and the output JSONL stays valid.
+    """
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
+def _sanitize_record(record: Dict) -> Dict:
+    return {k: _sanitize(v) for k, v in record.items()}
+
 
 def load_jobs(path: str) -> Iterator[Dict]:
     """Load jobs from jsonl file.
@@ -18,9 +37,11 @@ def load_jobs(path: str) -> Iterator[Dict]:
             if not line:
                 continue
             try:
-                yield json.loads(line)
+                record = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if isinstance(record, dict):
+                yield _sanitize_record(record)
 
 def count_jobs(path: str) -> int:
     """Count total jobs in file."""
