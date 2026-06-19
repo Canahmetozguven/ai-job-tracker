@@ -221,7 +221,7 @@ def main():
     # Step 1: Re-validate proxies (fresh list each run)
     proxies = validate_proxies()
     if not proxies:
-        run_summary["scrape"]["status"] = "failed"
+        # Scrape passes never run, so they keep their default "not_run" status.
         run_summary["analyze"]["status"] = "failed"
         print_summary()
         sys.exit(1)
