@@ -311,7 +311,7 @@ def main():
     parser.add_argument("--country", default="turkey",
                         help="Country for JobSpy's country_indeed (e.g. turkey, worldwide, usa, uk). Default: turkey")
     parser.add_argument("--big-tech", dest="big_tech", action="store_true",
-                        help="Post-filter results to Big Tech 7 companies (Meta, Apple, Amazon, Netflix, Google, Microsoft, Nvidia, Tesla)")
+                        help="Post-filter results to Big Tech 7 companies (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla)")
     parser.add_argument("--source", "-s", type=int, default=1, choices=[1, 2, 3],
                         help="1=JobSpy only, 2=LinkedIn only, 3=Both with fallback")
     parser.add_argument("--limit", "-n", type=int, default=10, help="Results limit per source")
