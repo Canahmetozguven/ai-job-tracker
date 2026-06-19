@@ -167,12 +167,17 @@ uv run python scraper.py --query "data scientist" --location "Turkey" --daemon -
 
 # Multiple sources with fallback
 uv run python scraper.py --source 3  # JobSpy → LinkedIn fallback
+
+# Big Tech 7 pass (global, company-filtered)
+uv run python scraper.py --query "data scientist" --country worldwide --big-tech --hours 1
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--query`, `-q` | (required) | Job search query |
 | `--location`, `-l` | (required) | Location (city, country) |
+| `--country` | `turkey` | Country for JobSpy's `country_indeed` (e.g. `turkey`, `worldwide`, `usa`, `uk`) |
+| `--big-tech` | off | Post-filter results to Big Tech 7 (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla). Forces a global search; ignores `--location`. |
 | `--source`, `-s` | `1` | 1=JobSpy, 2=LinkedIn, 3=Both with fallback |
 | `--limit`, `-n` | `10` | Max results per source |
 | `--output`, `-o` | `jobs.jsonl` | Output file |
@@ -221,9 +226,10 @@ uv run python run_daily.py
 
 The daily runner:
 1. **Validates proxies** - Tests `proxies/proxyscrape_raw.txt` and saves working ones
-2. **Scrapes jobs** - Uses a random working proxy for JobSpy/LinkedIn
-3. **Analyzes jobs** - Sends each job to Gemini AI for scoring
-4. **Reports results** - Prints summary + sends to Telegram
+2. **Pass 1 (Turkey local)** - Scrapes "data scientist" with `country=turkey` and `location=Turkey` into `jobs_linkedin.jsonl`
+3. **Pass 2 (Big Tech 7)** - Scrapes "data scientist" globally and post-filters to Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla — appends to the same JSONL
+4. **Analyzes** - Sends each new job to Gemini AI for scoring
+5. **Reports** - Prints summary + sends to Telegram (per-pass counts visible)
 
 ### Proxy Scraper
 
