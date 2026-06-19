@@ -311,7 +311,7 @@ def main():
     parser.add_argument("--country", default="turkey",
                         help="Country for JobSpy's country_indeed (e.g. turkey, worldwide, usa, uk). Default: turkey")
     parser.add_argument("--big-tech", dest="big_tech", action="store_true",
-                        help="Post-filter results to Big Tech 7 companies (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla)")
+                        help="Post-filter results to Big Tech 7 companies (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla). Forces a global search; ignores --location.")
     parser.add_argument("--source", "-s", type=int, default=1, choices=[1, 2, 3],
                         help="1=JobSpy only, 2=LinkedIn only, 3=Both with fallback")
     parser.add_argument("--limit", "-n", type=int, default=10, help="Results limit per source")
@@ -366,7 +366,6 @@ def main():
         big_tech = False
     else:
         query = args.query or input("Enter job search query: ").strip() if not args.query else args.query
-        location = args.location or input("Enter location (city, state/country): ").strip() if not args.location else args.location
         source = args.source
         limit = args.limit
         output = args.output
@@ -378,6 +377,12 @@ def main():
         specific_proxy = args.proxy
         country = args.country
         big_tech = args.big_tech
+        # --big-tech forces a global search; skip the location prompt so the
+        # script can run noninteractively (cron, redirected stdin).
+        if big_tech:
+            location = None
+        else:
+            location = args.location or input("Enter location (city, state/country): ").strip() if not args.location else args.location
 
     # Load proxies
     proxies = [] if no_proxy else load_proxies(PROXY_FILE)
@@ -390,9 +395,6 @@ def main():
     run_proxy = specific_proxy if specific_proxy else (random.choice(proxies) if proxies else None)
     if run_proxy:
         print(f"Using proxy: {run_proxy}")
-
-    if big_tech:
-        location = None
 
     source_pass = "big_tech_global" if big_tech else "turkey_local"
 
