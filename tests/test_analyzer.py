@@ -424,7 +424,7 @@ def test_format_run_summary_handles_no_jobs_and_partial():
     }
 
     no_jobs_message = format_run_summary(summary)
-    assert "Status: NO_JOBS" in no_jobs_message
+    assert "Status: NO JOBS" in no_jobs_message
     assert "No new jobs to analyze" in no_jobs_message
     assert "cron is still running" in no_jobs_message
     assert "✅ *SUCCESS*" in no_jobs_message
