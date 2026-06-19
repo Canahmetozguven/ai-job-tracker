@@ -1,7 +1,8 @@
 """Unit tests for career_scrapers package."""
 
+import time
 import urllib.error
-from unittest.mock import patch, MagicMock
+from unittest.mock import call, patch, MagicMock
 
 import pytest
 
@@ -85,7 +86,6 @@ def test_make_record_preserves_explicit_date_posted():
 
 
 def test_throttle_sleeps_to_meet_rate_limit():
-    import time
     s = AmazonScraper()
     s.rate_limit_seconds = 0.1
     s._throttle()  # first call: no sleep
@@ -112,10 +112,13 @@ def test_get_retries_on_5xx_then_succeeds():
         m.read.return_value = b'{"ok": true}'
         return m
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=fake_urlopen), \
+         patch("career_scrapers.base.time.sleep") as sleep_mock:
         body = s._get("https://example.com/api")
     assert body == b'{"ok": true}'
     assert call_count["n"] == 3
+    assert sleep_mock.call_count == 2
+    assert sleep_mock.call_args_list == [call(1), call(2)]
 
 
 def test_get_raises_after_max_retries():
@@ -125,9 +128,13 @@ def test_get_raises_after_max_retries():
     def always_503(req, timeout):
         raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", {}, None)
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_503):
+    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_503), \
+         patch("career_scrapers.base.time.sleep") as sleep_mock:
         with pytest.raises(urllib.error.HTTPError):
             s._get("https://example.com/api")
+    # max_retries=2 means 2 attempts total, with 1 backoff sleep between them.
+    assert sleep_mock.call_count == 1
+    assert sleep_mock.call_args_list == [call(1)]
 
 
 def test_get_does_not_retry_on_404():
@@ -138,7 +145,43 @@ def test_get_does_not_retry_on_404():
         call_count["n"] += 1
         raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_404):
+    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_404), \
+         patch("career_scrapers.base.time.sleep") as sleep_mock:
         with pytest.raises(urllib.error.HTTPError):
             s._get("https://example.com/api")
     assert call_count["n"] == 1  # no retry
+    assert sleep_mock.call_count == 0  # no backoff either
+
+
+# --- _get proxy path ---
+
+
+def test_get_uses_proxy_opener_when_proxy_set():
+    s = AmazonScraper(proxy="http://user:pass@proxy.example.com:8080")
+
+    fake_opener = MagicMock()
+    fake_response = MagicMock()
+    fake_response.__enter__ = lambda self: self
+    fake_response.__exit__ = lambda self, *a: None
+    fake_response.read.return_value = b'{"via": "proxy"}'
+    fake_opener.open.return_value = fake_response
+
+    with patch(
+        "career_scrapers.base.urllib.request.build_opener", return_value=fake_opener
+    ) as build_opener_mock, \
+         patch("career_scrapers.base.urllib.request.ProxyHandler") as proxy_handler_mock, \
+         patch("career_scrapers.base.urllib.request.urlopen") as urlopen_mock:
+        body = s._get("https://example.com/api")
+
+    assert body == b'{"via": "proxy"}'
+    # Proxy path was taken
+    assert build_opener_mock.call_count == 1
+    assert proxy_handler_mock.call_count == 1
+    # ProxyHandler was constructed with both http and https pointing at the proxy
+    proxy_handler_mock.assert_called_once_with({
+        "http": "http://user:pass@proxy.example.com:8080",
+        "https": "http://user:pass@proxy.example.com:8080",
+    })
+    assert fake_opener.open.call_count == 1
+    # Plain urlopen must NOT be used on the proxy path
+    assert urlopen_mock.call_count == 0

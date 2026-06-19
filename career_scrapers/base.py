@@ -20,6 +20,7 @@ class BaseCareerScraper:
     name: ClassVar[str] = ""
     base_url: ClassVar[str] = ""
     rate_limit_seconds: ClassVar[float] = 1.0
+    # Max total attempts (first try + retries). 3 means: try once, retry up to 2 times.
     max_retries: ClassVar[int] = 3
 
     def __init__(self, proxy: str | None = None):
@@ -50,9 +51,21 @@ class BaseCareerScraper:
         if headers:
             merged_headers.update(headers)
         req = urllib.request.Request(url, headers=merged_headers)
+        if self.proxy:
+            # Proxy path uses a dedicated opener; not interchangeable with the
+            # plain `urlopen` call below (and therefore not currently covered
+            # by the urlopen-patch-based retry tests).
+            proxy_handler = urllib.request.ProxyHandler({
+                "http": self.proxy,
+                "https": self.proxy,
+            })
+            opener = urllib.request.build_opener(proxy_handler)
         last_exc: Exception | None = None
         for attempt in range(self.max_retries):
             try:
+                if self.proxy:
+                    with opener.open(req, timeout=30) as r:
+                        return r.read()
                 with urllib.request.urlopen(req, timeout=30) as r:
                     return r.read()
             except urllib.error.HTTPError as e:
@@ -84,6 +97,21 @@ class BaseCareerScraper:
         is_remote: bool | None = None,
         salary: Any = None,
     ) -> dict:
+        """Build a record matching the common record schema.
+
+        Required kwargs: title, company, location, job_url.
+        Optional kwargs: description, date_posted, source, is_remote, salary.
+
+        Fields filled with defaults:
+          - description: passed through (None if omitted)
+          - date_posted: "unknown" if omitted/empty
+          - job_type: None
+          - salary: passed through (None if omitted)
+          - source: f"{self.name.lower()}_career" if omitted
+          - is_remote: passed through (None if omitted)
+          - source_pass: "career_site"
+          - source_company: self.name
+        """
         return {
             "title": title,
             "company": company,
@@ -93,11 +121,8 @@ class BaseCareerScraper:
             "date_posted": date_posted or "unknown",
             "job_type": None,
             "salary": salary,
-            "source": source or self._source_tag(),
+            "source": source or f"{self.name.lower()}_career",
             "is_remote": is_remote,
             "source_pass": "career_site",
             "source_company": self.name,
         }
-
-    def _source_tag(self) -> str:
-        return f"{self.name.lower()}_career"

@@ -1,7 +1,7 @@
 """Big Tech 7 career-site scrapers.
 
-Each module registers a concrete scraper class by importing it in
-`__all__` below; the SCRAPERS dict is auto-populated.
+Each module that defines a concrete scraper is imported here and added to
+the SCRAPERS registry below.
 """
 from career_scrapers.base import BaseCareerScraper
 
