@@ -1,6 +1,6 @@
 import math
 import pytest
-from scraper import deduplicate_jobs, df_to_job_records, _clean
+from scraper import deduplicate_jobs, df_to_job_records, filter_big_tech, _clean
 
 def test_deduplicate_jobs():
     jobs = [
@@ -125,3 +125,48 @@ def test_df_to_job_records_includes_source_pass():
 
     records_bt = df_to_job_records(df, source_pass="big_tech_global")
     assert records_bt[0]["source_pass"] == "big_tech_global"
+
+
+def test_filter_big_tech_keeps_matching_records():
+    records = [
+        {"title": "DS at Meta", "company": "Meta Platforms", "source_pass": "big_tech_global"},
+        {"title": "DS at Apple", "company": "Apple Inc", "source_pass": "big_tech_global"},
+        {"title": "DS at Random", "company": "Random Co", "source_pass": "big_tech_global"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 2
+    by_company = {r["company"]: r for r in kept}
+    assert by_company["Meta Platforms"]["big_tech_company"] == "Meta"
+    assert by_company["Apple Inc"]["big_tech_company"] == "Apple"
+
+
+def test_filter_big_tech_drops_non_matches():
+    records = [
+        {"title": "DS at Acme", "company": "Acme Co"},
+        {"title": "DS at Jobgether", "company": "Jobgether"},
+    ]
+    assert filter_big_tech(records) == []
+
+
+def test_filter_big_tech_handles_none_company():
+    records = [
+        {"title": "DS at Unknown", "company": None},
+        {"title": "DS at Meta", "company": "Meta"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 1
+    assert kept[0]["company"] == "Meta"
+
+
+def test_filter_big_tech_handles_empty_company():
+    records = [
+        {"title": "DS at Empty", "company": ""},
+        {"title": "DS at Google", "company": "Alphabet"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 1
+    assert kept[0]["big_tech_company"] == "Google"
+
+
+def test_filter_big_tech_empty_input():
+    assert filter_big_tech([]) == []

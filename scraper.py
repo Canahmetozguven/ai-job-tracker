@@ -122,6 +122,23 @@ def df_to_job_records(df, source_pass: str = "turkey_local") -> list[dict]:
             }
         records.append(record)
     return records
+def filter_big_tech(records: list[dict]) -> list[dict]:
+    """Filter records to only Big Tech 7 companies, tagging each survivor with
+    `big_tech_company` (the canonical name from BIG_TECH_COMPANIES).
+
+    Records with missing or non-matching `company` are dropped. The match uses
+    `config.match_big_tech` — case-insensitive substring against aliases.
+    """
+    from config import match_big_tech  # local import to avoid a cycle if config ever imports scraper
+
+    kept = []
+    for record in records:
+        canonical = match_big_tech(record.get("company"))
+        if canonical is None:
+            continue
+        record["big_tech_company"] = canonical
+        kept.append(record)
+    return kept
 
 async def scrape_with_linkedin(query: str, location: str, limit: int) -> list[dict]:
     """Scrape jobs using LinkedIn-scraper (async)."""
