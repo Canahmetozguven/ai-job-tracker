@@ -9,6 +9,7 @@ import os
 import random
 import sys
 import time
+from config import match_big_tech
 from datetime import datetime
 from typing import Optional
 
@@ -122,6 +123,8 @@ def df_to_job_records(df, source_pass: str = "turkey_local") -> list[dict]:
             }
         records.append(record)
     return records
+
+
 def filter_big_tech(records: list[dict]) -> list[dict]:
     """Filter records to only Big Tech 7 companies, tagging each survivor with
     `big_tech_company` (the canonical name from BIG_TECH_COMPANIES).
@@ -129,8 +132,6 @@ def filter_big_tech(records: list[dict]) -> list[dict]:
     Records with missing or non-matching `company` are dropped. The match uses
     `config.match_big_tech` — case-insensitive substring against aliases.
     """
-    from config import match_big_tech  # local import to avoid a cycle if config ever imports scraper
-
     kept = []
     for record in records:
         canonical = match_big_tech(record.get("company"))
