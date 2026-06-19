@@ -206,8 +206,8 @@ def _update_pass_summary(pass_key: str, scrape_ok: bool) -> None:
     """Read jobs_linkedin.jsonl, count records tagged with `pass_key`, and update run_summary.
 
     `found` = total records tagged with this pass. `new` = records with a
-    date_posted in the last hour (proxy for "new this cycle" — same heuristic
-    as the original code).
+    parseable date_posted in the last hour; unparseable/missing dates count
+    as new so jobs the scraper couldn't timestamp still surface in the summary.
     """
     bucket = run_summary["scrape"][pass_key]
     bucket["status"] = "success" if scrape_ok else "failed"
@@ -251,7 +251,7 @@ def main():
     run_summary["proxy_validation"]["selected"] = proxy
     print(f"Using proxy: {proxy}")
 
-    # Step 2: Two sequential scraper passes — Turkey local + Big Tech 7 global.
+    # Step 3: Two sequential scraper passes — Turkey local + Big Tech 7 global.
     # Both pass --append so they merge into jobs_linkedin.jsonl with dedup by job_url.
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
     print("  -> Pass 1: Turkey-local jobs")
@@ -259,6 +259,7 @@ def main():
         PYTHON, "scraper.py",
         "--query", "data scientist",
         "--country", "turkey",
+        "--location", "Turkey",
         "--hours", "1",
         "--output", "jobs_linkedin.jsonl",
         "--proxy", proxy,
