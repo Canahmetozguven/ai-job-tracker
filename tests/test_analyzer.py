@@ -424,7 +424,7 @@ def test_format_run_summary_handles_no_jobs_and_partial():
     }
 
     no_jobs_message = format_run_summary(summary)
-    assert "Status: NO_JOBS" in no_jobs_message
+    assert "Status: NO JOBS" in no_jobs_message
     assert "No new jobs to analyze" in no_jobs_message
     assert "cron is still running" in no_jobs_message
     assert "✅ *SUCCESS*" in no_jobs_message
@@ -452,6 +452,46 @@ def test_format_run_summary_marks_failed_analysis_as_issues():
     msg = format_run_summary(summary)
     assert "Status: FAILED" in msg
     assert "❌ *ISSUES DETECTED*" in msg
+
+
+def test_format_run_summary_renders_per_pass_breakdown():
+    """Per-pass summary: when scrape is a nested dict, render one row per pass
+    (Turkey local + Big Tech 7) and consider either pass a success for the
+    overall status check."""
+    summary = {
+        "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
+        "scrape": {
+            "turkey_local":    {"found": 8, "new": 4, "status": "success"},
+            "big_tech_global": {"found": 3, "new": 2, "status": "success"},
+        },
+        "analyze": {"status": "success", "processed": 6, "succeeded": 6, "failed": 0, "error_summary": None},
+        "errors": [],
+    }
+
+    msg = format_run_summary(summary)
+    assert "🇹🇷 Turkey local" in msg
+    assert "🌍 Big Tech 7" in msg
+    assert "Found: 8" in msg
+    assert "Found: 3" in msg
+    assert "✅ *SUCCESS*" in msg
+
+
+def test_format_run_summary_per_pass_considers_either_pass_a_success():
+    """One pass failed, one succeeded → overall is still SUCCESS (partial)."""
+    summary = {
+        "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
+        "scrape": {
+            "turkey_local":    {"found": 5, "new": 2, "status": "success"},
+            "big_tech_global": {"found": 0, "new": 0, "status": "failed"},
+        },
+        "analyze": {"status": "success", "processed": 2, "succeeded": 2, "failed": 0, "error_summary": None},
+        "errors": [],
+    }
+
+    msg = format_run_summary(summary)
+    assert "❌ 🌍 Big Tech 7" in msg
+    assert "✅ 🇹🇷 Turkey local" in msg
+    assert "✅ *SUCCESS*" in msg
 
 
 def test_print_summary_marks_partial_analysis_as_issues_detected_and_partial_status():

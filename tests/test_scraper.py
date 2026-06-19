@@ -1,6 +1,6 @@
 import math
 import pytest
-from scraper import deduplicate_jobs, df_to_job_records, _clean
+from scraper import deduplicate_jobs, df_to_job_records, filter_big_tech, _clean
 
 def test_deduplicate_jobs():
     jobs = [
@@ -63,7 +63,7 @@ def test_df_to_job_records_preserves_nan_date_as_string():
         "site": "linkedin", "is_remote": False,
     }))])})()
 
-    records = df_to_job_records(df)
+    records = df_to_job_records(df, source_pass="turkey_local")
     assert len(records) == 1
     # The exact placeholder string isn't load-bearing — only that the
     # resulting value is a non-empty, non-parseable string so the analyzer
@@ -72,6 +72,7 @@ def test_df_to_job_records_preserves_nan_date_as_string():
     assert records[0]["date_posted"]  # non-empty
     assert records[0]["description"] is None
     assert records[0]["job_type"] is None
+    assert records[0]["source_pass"] == "turkey_local"
 
 
 def test_df_to_job_records_keeps_job_when_date_column_missing():
@@ -89,9 +90,10 @@ def test_df_to_job_records_keeps_job_when_date_column_missing():
         "site": "linkedin", "is_remote": False,
     }))])})()
 
-    records = df_to_job_records(df)
+    records = df_to_job_records(df, source_pass="turkey_local")
     assert len(records) == 1
     assert isinstance(records[0]["date_posted"], str) and records[0]["date_posted"]
+    assert records[0]["source_pass"] == "turkey_local"
 
 
 def test_df_to_job_records_handles_empty_dataframe():
@@ -99,4 +101,72 @@ def test_df_to_job_records_handles_empty_dataframe():
         empty = True
         def iterrows(self):
             return iter([])
-    assert df_to_job_records(_EmptyDF()) == []
+    assert df_to_job_records(_EmptyDF(), source_pass="turkey_local") == []
+
+
+def test_df_to_job_records_includes_source_pass():
+    """Every record from df_to_job_records must carry the source_pass tag so
+    downstream consumers (analyzer, Telegram summary) can distinguish Turkey-local
+    jobs from Big Tech jobs."""
+    class _Row(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    df = type("DF", (), {"empty": False, "iterrows": lambda self: iter([(0, _Row({
+        "title": "T", "company": "C", "location": "L", "job_url": "u",
+        "description": None, "date_posted": "2026-01-01", "job_type": None,
+        "min_amount": None, "max_amount": None, "currency": "USD",
+        "site": "linkedin", "is_remote": False,
+    }))])})()
+
+    records = df_to_job_records(df, source_pass="turkey_local")
+    assert len(records) == 1
+    assert records[0]["source_pass"] == "turkey_local"
+
+    records_bt = df_to_job_records(df, source_pass="big_tech_global")
+    assert records_bt[0]["source_pass"] == "big_tech_global"
+
+
+def test_filter_big_tech_keeps_matching_records():
+    records = [
+        {"title": "DS at Meta", "company": "Meta Platforms", "source_pass": "big_tech_global"},
+        {"title": "DS at Apple", "company": "Apple Inc", "source_pass": "big_tech_global"},
+        {"title": "DS at Random", "company": "Random Co", "source_pass": "big_tech_global"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 2
+    by_company = {r["company"]: r for r in kept}
+    assert by_company["Meta Platforms"]["big_tech_company"] == "Meta"
+    assert by_company["Apple Inc"]["big_tech_company"] == "Apple"
+
+
+def test_filter_big_tech_drops_non_matches():
+    records = [
+        {"title": "DS at Acme", "company": "Acme Co"},
+        {"title": "DS at Jobgether", "company": "Jobgether"},
+    ]
+    assert filter_big_tech(records) == []
+
+
+def test_filter_big_tech_handles_none_company():
+    records = [
+        {"title": "DS at Unknown", "company": None},
+        {"title": "DS at Meta", "company": "Meta"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 1
+    assert kept[0]["company"] == "Meta"
+
+
+def test_filter_big_tech_handles_empty_company():
+    records = [
+        {"title": "DS at Empty", "company": ""},
+        {"title": "DS at Google", "company": "Alphabet"},
+    ]
+    kept = filter_big_tech(records)
+    assert len(kept) == 1
+    assert kept[0]["big_tech_company"] == "Google"
+
+
+def test_filter_big_tech_empty_input():
+    assert filter_big_tech([]) == []

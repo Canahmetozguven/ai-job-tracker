@@ -2,12 +2,13 @@
 """Job scraper + analyzer runner for cron jobs with proxy validation + retry."""
 
 import asyncio
+import json
 import os
 import random
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config import TELEGRAM_BOT_TOKEN, DEFAULT_CHAT_ID
 from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
@@ -28,7 +29,10 @@ MAX_WORKERS = 20
 run_summary = {
     "started_at": None,
     "proxy_validation": {"total": 0, "working": 0, "selected": None},
-    "scrape": {"found": 0, "new": 0, "status": "not_run"},
+    "scrape": {
+        "turkey_local":    {"found": 0, "new": 0, "status": "not_run"},
+        "big_tech_global": {"found": 0, "new": 0, "status": "not_run"},
+    },
     "analyze": {"processed": 0, "succeeded": 0, "failed": 0, "status": "not_run", "error_summary": None},
     "errors": [],
 }
@@ -73,14 +77,31 @@ def print_summary(send_tg: bool = True):
         print(f"      Selected:     {pv['selected']}")
     print()
 
-    # Scrape section
+    # Scrape section — per-pass breakdown
     sc = run_summary["scrape"]
-    status_icon = "✓" if sc["status"] == "success" else ("⚠" if sc["status"] == "partial" else "✗")
-    print(f"  [{status_icon}] SCRAPING")
-    print(f"      Jobs found:  {sc['found']}")
-    print(f"      New jobs:    {sc['new']}")
-    print(f"      Status:      {sc['status'].upper()}")
-    print()
+    pass_labels = {
+        "turkey_local":    "Turkey local",
+        "big_tech_global": "Big Tech 7",
+    }
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        print("  SCRAPING")
+        for key, label in pass_labels.items():
+            bucket = sc.get(key, {})
+            bucket_status = bucket.get("status", "not_run")
+            status_icon = "✓" if bucket_status == "success" else ("⚠" if bucket_status == "partial" else "✗")
+            print(f"      [{status_icon}] {label}")
+            print(f"          Jobs found:  {bucket.get('found', 0)}")
+            print(f"          New jobs:    {bucket.get('new', 0)}")
+            print(f"          Status:      {bucket_status.upper()}")
+        print()
+    else:
+        # Legacy single-pass format
+        status_icon = "✓" if sc["status"] == "success" else ("⚠" if sc["status"] == "partial" else "✗")
+        print(f"  [{status_icon}] SCRAPING")
+        print(f"      Jobs found:  {sc['found']}")
+        print(f"      New jobs:    {sc['new']}")
+        print(f"      Status:      {sc['status'].upper()}")
+        print()
 
     # Analyze section
     an = run_summary["analyze"]
@@ -104,11 +125,15 @@ def print_summary(send_tg: bool = True):
 
     # Overall status
     analysis_ok = an["status"] in ("success", "no_jobs")
-    all_ok = (
-        pv["working"] > 0
-        and sc["status"] in ("success", "partial")
-        and analysis_ok
-    )
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        scrape_ok = any(
+            bucket.get("status") in ("success", "partial")
+            for bucket in sc.values()
+            if isinstance(bucket, dict)
+        )
+    else:
+        scrape_ok = sc["status"] in ("success", "partial")
+    all_ok = pv["working"] > 0 and scrape_ok and analysis_ok
     print(f"  {'✓' if all_ok else '✗'} OVERALL: {'SUCCESS' if all_ok else 'ISSUES DETECTED'}")
     print_header("END OF RUN")
 
@@ -177,13 +202,47 @@ def run_command(cmd: list, desc: str, retries: int = MAX_RETRIES) -> bool:
     run_summary["errors"].append(f"{desc} failed after {retries} attempts")
     return False
 
+def _update_pass_summary(pass_key: str, scrape_ok: bool) -> None:
+    """Read jobs_linkedin.jsonl, count records tagged with `pass_key`, and update run_summary.
+
+    `found` = total records tagged with this pass. `new` = records with a
+    parseable date_posted in the last hour; unparseable/missing dates count
+    as new so jobs the scraper couldn't timestamp still surface in the summary.
+    """
+    bucket = run_summary["scrape"][pass_key]
+    bucket["status"] = "success" if scrape_ok else "failed"
+    if not os.path.exists("jobs_linkedin.jsonl"):
+        return
+    count_total = 0
+    count_recent = 0
+    one_hour_ago = datetime.now() - timedelta(hours=1)
+    with open("jobs_linkedin.jsonl") as f:
+        for line in f:
+            try:
+                job = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if job.get("source_pass") != pass_key:
+                continue
+            count_total += 1
+            posted = job.get("date_posted")
+            if posted and posted != "unknown" and posted != "None":
+                try:
+                    posted_dt = datetime.fromisoformat(str(posted))
+                    if posted_dt >= one_hour_ago:
+                        count_recent += 1
+                except ValueError:
+                    count_recent += 1  # unparseable → treat as new
+    bucket["found"] = count_total
+    bucket["new"] = count_recent
+
 def main():
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Job scraper + analyzer starting...")
     
     # Step 1: Re-validate proxies (fresh list each run)
     proxies = validate_proxies()
     if not proxies:
-        run_summary["scrape"]["status"] = "failed"
+        # Scrape passes never run, so they keep their default "not_run" status.
         run_summary["analyze"]["status"] = "failed"
         print_summary()
         sys.exit(1)
@@ -192,29 +251,36 @@ def main():
     run_summary["proxy_validation"]["selected"] = proxy
     print(f"Using proxy: {proxy}")
 
-    # Step 2: Scrape with fresh proxy
+    # Step 3: Two sequential scraper passes — Turkey local + Big Tech 7 global.
+    # Both pass --append so they merge into jobs_linkedin.jsonl with dedup by job_url.
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
-    scrape_ok = run_command([
+    print("  -> Pass 1: Turkey-local jobs")
+    scrape_ok_a = run_command([
         PYTHON, "scraper.py",
         "--query", "data scientist",
+        "--country", "turkey",
         "--location", "Turkey",
         "--hours", "1",
         "--output", "jobs_linkedin.jsonl",
-        "--proxy", proxy
-    ], "Scraping LinkedIn jobs")
+        "--proxy", proxy,
+        "--append",
+    ], "Scraping Turkey-local jobs")
+    _update_pass_summary("turkey_local", scrape_ok_a)
 
-    # Capture scrape results
-    if os.path.exists("jobs_linkedin.jsonl"):
-        with open("jobs_linkedin.jsonl") as f:
-            lines = f.readlines()
-        run_summary["scrape"]["found"] = len(lines)
-        # New jobs estimate - would need previous count for exact, using found as estimate
-        run_summary["scrape"]["new"] = len(lines)
-    
-    if scrape_ok:
-        run_summary["scrape"]["status"] = "success"
-    else:
-        run_summary["scrape"]["status"] = "failed"
+    print("  -> Pass 2: Big Tech 7 (global, company-filtered)")
+    scrape_ok_b = run_command([
+        PYTHON, "scraper.py",
+        "--query", "data scientist",
+        "--country", "worldwide",
+        "--big-tech",
+        "--hours", "1",
+        "--output", "jobs_linkedin.jsonl",
+        "--proxy", proxy,
+        "--append",
+    ], "Scraping Big Tech 7 jobs")
+    _update_pass_summary("big_tech_global", scrape_ok_b)
+
+    if not (scrape_ok_a or scrape_ok_b):
         run_summary["analyze"]["status"] = "skipped"
         print_summary()
         sys.exit(1)
