@@ -63,7 +63,7 @@ def test_df_to_job_records_preserves_nan_date_as_string():
         "site": "linkedin", "is_remote": False,
     }))])})()
 
-    records = df_to_job_records(df)
+    records = df_to_job_records(df, source_pass="turkey_local")
     assert len(records) == 1
     # The exact placeholder string isn't load-bearing — only that the
     # resulting value is a non-empty, non-parseable string so the analyzer
@@ -72,6 +72,7 @@ def test_df_to_job_records_preserves_nan_date_as_string():
     assert records[0]["date_posted"]  # non-empty
     assert records[0]["description"] is None
     assert records[0]["job_type"] is None
+    assert records[0]["source_pass"] == "turkey_local"
 
 
 def test_df_to_job_records_keeps_job_when_date_column_missing():
@@ -89,9 +90,10 @@ def test_df_to_job_records_keeps_job_when_date_column_missing():
         "site": "linkedin", "is_remote": False,
     }))])})()
 
-    records = df_to_job_records(df)
+    records = df_to_job_records(df, source_pass="turkey_local")
     assert len(records) == 1
     assert isinstance(records[0]["date_posted"], str) and records[0]["date_posted"]
+    assert records[0]["source_pass"] == "turkey_local"
 
 
 def test_df_to_job_records_handles_empty_dataframe():
@@ -99,4 +101,27 @@ def test_df_to_job_records_handles_empty_dataframe():
         empty = True
         def iterrows(self):
             return iter([])
-    assert df_to_job_records(_EmptyDF()) == []
+    assert df_to_job_records(_EmptyDF(), source_pass="turkey_local") == []
+
+
+def test_df_to_job_records_includes_source_pass():
+    """Every record from df_to_job_records must carry the source_pass tag so
+    downstream consumers (analyzer, Telegram summary) can distinguish Turkey-local
+    jobs from Big Tech jobs."""
+    class _Row(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    df = type("DF", (), {"empty": False, "iterrows": lambda self: iter([(0, _Row({
+        "title": "T", "company": "C", "location": "L", "job_url": "u",
+        "description": None, "date_posted": "2026-01-01", "job_type": None,
+        "min_amount": None, "max_amount": None, "currency": "USD",
+        "site": "linkedin", "is_remote": False,
+    }))])})()
+
+    records = df_to_job_records(df, source_pass="turkey_local")
+    assert len(records) == 1
+    assert records[0]["source_pass"] == "turkey_local"
+
+    records_bt = df_to_job_records(df, source_pass="big_tech_global")
+    assert records_bt[0]["source_pass"] == "big_tech_global"

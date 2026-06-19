@@ -80,8 +80,13 @@ def _clean(value):
     return value
 
 
-def df_to_job_records(df) -> list[dict]:
-    """Convert pandas DataFrame to list of job dicts."""
+def df_to_job_records(df, source_pass: str = "turkey_local") -> list[dict]:
+    """Convert pandas DataFrame to list of job dicts.
+
+    `source_pass` tags every record so the analyzer/Telegram can distinguish
+    Turkey-local jobs from Big Tech jobs. Default "turkey_local" preserves
+    the existing single-pass behavior for backward compatibility.
+    """
     if df.empty:
         return []
     records = []
@@ -107,6 +112,7 @@ def df_to_job_records(df) -> list[dict]:
             "salary": None,
             "source": row.get("site", "unknown"),
             "is_remote": bool(row.get("is_remote")) if "is_remote" in row else None,
+            "source_pass": source_pass,
         }
         if row.get("min_amount") or row.get("max_amount"):
             record["salary"] = {
