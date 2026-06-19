@@ -1,6 +1,5 @@
 """Unit tests for config.py helpers."""
 
-import pytest
 from config import BIG_TECH_COMPANIES, match_big_tech
 
 
