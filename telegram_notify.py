@@ -124,14 +124,30 @@ def format_run_summary(summary: dict) -> str:
         lines.append(f"   Selected: {pv['selected']}")
     lines.append("")
 
-    # Scrape section
+    # Scrape section — per-pass breakdown
     sc = summary.get("scrape", {})
     status_map = {"success": "✅", "partial": "⚠️", "failed": "❌", "not_run": "➖"}
-    status = status_map.get(sc.get("status", "not_run"), "➖")
-    lines.append(f"{status} *Scraping*")
-    lines.append(f"   Found: {sc.get('found', 0)}")
-    lines.append(f"   New: {sc.get('new', 0)}")
-    lines.append("")
+    pass_labels = {
+        "turkey_local":    "🇹🇷 Turkey local",
+        "big_tech_global": "🌍 Big Tech 7",
+    }
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        # New per-pass format
+        lines.append("*Scraping*")
+        for key, label in pass_labels.items():
+            bucket = sc.get(key, {})
+            status = status_map.get(bucket.get("status", "not_run"), "➖")
+            lines.append(f"   {status} {label}")
+            lines.append(f"      Found: {bucket.get('found', 0)}")
+            lines.append(f"      New:   {bucket.get('new', 0)}")
+        lines.append("")
+    else:
+        # Legacy single-pass format
+        status = status_map.get(sc.get("status", "not_run"), "➖")
+        lines.append(f"{status} *Scraping*")
+        lines.append(f"   Found: {sc.get('found', 0)}")
+        lines.append(f"   New: {sc.get('new', 0)}")
+        lines.append("")
 
     # Analyze section
     an = summary.get("analyze", {})
@@ -165,11 +181,15 @@ def format_run_summary(summary: dict) -> str:
 
     # Overall status
     analysis_ok = an.get("status") in ("success", "no_jobs")
-    all_ok = (
-        pv.get("working", 0) > 0
-        and sc.get("status") in ("success", "partial")
-        and analysis_ok
-    )
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        scrape_ok = any(
+            bucket.get("status") in ("success", "partial")
+            for bucket in sc.values()
+            if isinstance(bucket, dict)
+        )
+    else:
+        scrape_ok = sc.get("status") in ("success", "partial")
+    all_ok = pv.get("working", 0) > 0 and scrape_ok and analysis_ok
     overall = "✅ *SUCCESS*" if all_ok else "❌ *ISSUES DETECTED*"
     lines.append(overall)
 

@@ -77,14 +77,31 @@ def print_summary(send_tg: bool = True):
         print(f"      Selected:     {pv['selected']}")
     print()
 
-    # Scrape section
+    # Scrape section — per-pass breakdown
     sc = run_summary["scrape"]
-    status_icon = "✓" if sc["status"] == "success" else ("⚠" if sc["status"] == "partial" else "✗")
-    print(f"  [{status_icon}] SCRAPING")
-    print(f"      Jobs found:  {sc['found']}")
-    print(f"      New jobs:    {sc['new']}")
-    print(f"      Status:      {sc['status'].upper()}")
-    print()
+    pass_labels = {
+        "turkey_local":    "Turkey local",
+        "big_tech_global": "Big Tech 7",
+    }
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        print("  SCRAPING")
+        for key, label in pass_labels.items():
+            bucket = sc.get(key, {})
+            bucket_status = bucket.get("status", "not_run")
+            status_icon = "✓" if bucket_status == "success" else ("⚠" if bucket_status == "partial" else "✗")
+            print(f"      [{status_icon}] {label}")
+            print(f"          Jobs found:  {bucket.get('found', 0)}")
+            print(f"          New jobs:    {bucket.get('new', 0)}")
+            print(f"          Status:      {bucket_status.upper()}")
+        print()
+    else:
+        # Legacy single-pass format
+        status_icon = "✓" if sc["status"] == "success" else ("⚠" if sc["status"] == "partial" else "✗")
+        print(f"  [{status_icon}] SCRAPING")
+        print(f"      Jobs found:  {sc['found']}")
+        print(f"      New jobs:    {sc['new']}")
+        print(f"      Status:      {sc['status'].upper()}")
+        print()
 
     # Analyze section
     an = run_summary["analyze"]
@@ -108,11 +125,15 @@ def print_summary(send_tg: bool = True):
 
     # Overall status
     analysis_ok = an["status"] in ("success", "no_jobs")
-    all_ok = (
-        pv["working"] > 0
-        and sc["status"] in ("success", "partial")
-        and analysis_ok
-    )
+    if isinstance(sc, dict) and "turkey_local" in sc:
+        scrape_ok = any(
+            bucket.get("status") in ("success", "partial")
+            for bucket in sc.values()
+            if isinstance(bucket, dict)
+        )
+    else:
+        scrape_ok = sc["status"] in ("success", "partial")
+    all_ok = pv["working"] > 0 and scrape_ok and analysis_ok
     print(f"  {'✓' if all_ok else '✗'} OVERALL: {'SUCCESS' if all_ok else 'ISSUES DETECTED'}")
     print_header("END OF RUN")
 
