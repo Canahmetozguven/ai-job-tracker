@@ -520,3 +520,42 @@ def test_print_summary_marks_partial_analysis_as_issues_detected_and_partial_sta
         assert "OVERALL: ISSUES DETECTED" in output
     finally:
         run_daily.run_summary = original_run_summary
+
+
+def test_format_run_summary_renders_three_pass_breakdown():
+    """Three-pass summary: render one row per pass (Turkey + Big Tech 7 + Career sites)."""
+    from telegram_notify import format_run_summary
+    summary = {
+        "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
+        "scrape": {
+            "turkey_local":    {"found": 8, "new": 4, "status": "success"},
+            "big_tech_global": {"found": 3, "new": 2, "status": "success"},
+            "career_site":     {"found": 5, "new": 1, "status": "success"},
+        },
+        "analyze": {"status": "success", "processed": 12, "succeeded": 12, "failed": 0, "error_summary": None},
+        "errors": [],
+    }
+    msg = format_run_summary(summary)
+    assert "🇹🇷 Turkey local" in msg
+    assert "🌍 Big Tech 7" in msg
+    assert "🏢 Career sites" in msg
+    assert "Found: 5" in msg
+    assert "✅ *SUCCESS*" in msg
+
+
+def test_format_run_summary_career_site_failure_does_not_kill_run():
+    from telegram_notify import format_run_summary
+    summary = {
+        "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
+        "scrape": {
+            "turkey_local":    {"found": 8, "new": 4, "status": "success"},
+            "big_tech_global": {"found": 3, "new": 2, "status": "success"},
+            "career_site":     {"found": 0, "new": 0, "status": "failed"},
+        },
+        "analyze": {"status": "success", "processed": 6, "succeeded": 6, "failed": 0, "error_summary": None},
+        "errors": [],
+    }
+    msg = format_run_summary(summary)
+    assert "❌ 🏢 Career sites" in msg
+    # Turkey + Big Tech still pass, so overall is success.
+    assert "✅ *SUCCESS*" in msg
