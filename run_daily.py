@@ -32,6 +32,7 @@ run_summary = {
     "scrape": {
         "turkey_local":    {"found": 0, "new": 0, "status": "not_run"},
         "big_tech_global": {"found": 0, "new": 0, "status": "not_run"},
+        "career_site":     {"found": 0, "new": 0, "status": "not_run"},
     },
     "analyze": {"processed": 0, "succeeded": 0, "failed": 0, "status": "not_run", "error_summary": None},
     "errors": [],
@@ -82,6 +83,7 @@ def print_summary(send_tg: bool = True):
     pass_labels = {
         "turkey_local":    "Turkey local",
         "big_tech_global": "Big Tech 7",
+        "career_site":     "Career sites",
     }
     if isinstance(sc, dict) and "turkey_local" in sc:
         print("  SCRAPING")
@@ -251,8 +253,9 @@ def main():
     run_summary["proxy_validation"]["selected"] = proxy
     print(f"Using proxy: {proxy}")
 
-    # Step 3: Two sequential scraper passes — Turkey local + Big Tech 7 global.
-    # Both pass --append so they merge into jobs_linkedin.jsonl with dedup by job_url.
+    # Step 3: Three sequential scraper passes — Turkey local + Big Tech 7 (LinkedIn)
+    # + Big Tech 7 career sites (direct). All pass --append so they merge into
+    # jobs_linkedin.jsonl with dedup by job_url.
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
     print("  -> Pass 1: Turkey-local jobs")
     scrape_ok_a = run_command([
@@ -280,7 +283,20 @@ def main():
     ], "Scraping Big Tech 7 jobs")
     _update_pass_summary("big_tech_global", scrape_ok_b)
 
-    if not (scrape_ok_a or scrape_ok_b):
+    # Career-site pass uses a 7-day window — these sites update less often than
+    # LinkedIn, so a daily cron needs to look back further to catch anything new.
+    print("  -> Pass 3: Big Tech career sites (direct, all 7)")
+    scrape_ok_c = run_command([
+        PYTHON, "career_scraper.py",
+        "--query", "data scientist",
+        "--hours", "168",                # 7 days — career sites update less often
+        "--output", "jobs_linkedin.jsonl",
+        "--proxy", proxy,
+        "--append",
+    ], "Scraping Big Tech career sites")
+    _update_pass_summary("career_site", scrape_ok_c)
+
+    if not (scrape_ok_a or scrape_ok_b or scrape_ok_c):
         run_summary["analyze"]["status"] = "skipped"
         print_summary()
         sys.exit(1)
