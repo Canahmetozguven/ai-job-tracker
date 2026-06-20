@@ -1,7 +1,9 @@
 """Unit tests for career_scrapers package."""
 
+import json
 import time
 import urllib.error
+from pathlib import Path
 from unittest.mock import call, patch, MagicMock
 
 import pytest
@@ -186,3 +188,67 @@ def test_get_uses_proxy_opener_when_proxy_set():
     assert fake_opener.open.call_count == 1
     # Plain urlopen must NOT be used on the proxy path
     assert urlopen_mock.call_count == 0
+
+
+# --- AmazonScraper.fetch_jobs ---
+
+
+AMAZON_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "career_sites" / "amazon.json"
+)
+
+
+def test_amazon_scraper_parses_fixture():
+    fake_body = AMAZON_FIXTURE_PATH.read_bytes()
+    data = json.loads(fake_body)
+    assert data.get("jobs"), "fixture must contain at least one job"
+
+    s = AmazonScraper()
+    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=fake_body):
+        records = s.fetch_jobs("data scientist", limit=10)
+
+    assert isinstance(records, list)
+    assert len(records) == len(data["jobs"])
+
+    first = records[0]
+    assert first["title"] == data["jobs"][0]["title"]
+    assert first["source_pass"] == "career_site"
+    assert first["source_company"] == "Amazon"
+    assert first["source"] == "amazon_career"
+    # `company` is canonicalized to the scraper's `name`, never the API's variant
+    # ("Amazon.com Services LLC").
+    assert first["company"] == "Amazon"
+    assert first["job_url"].startswith("https://")
+    # Amazon returns a relative `job_path`; we must resolve it against the base URL.
+    assert first["job_url"].startswith("https://amazon.jobs/")
+    assert first["location"] == data["jobs"][0]["location"]
+    assert first["date_posted"] == data["jobs"][0]["posted_date"]
+
+
+def test_amazon_scraper_returns_empty_on_no_jobs():
+    s = AmazonScraper()
+    empty = b'{"hits": 0, "jobs": []}'
+    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=empty):
+        assert s.fetch_jobs("x") == []
+
+
+def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
+    """Even if a future Amazon API call returned a different `company_name`,
+    our record's `company` field must always be the scraper's canonical name."""
+    body = json.dumps({
+        "hits": 1,
+        "jobs": [{
+            "title": "TPM",
+            "company_name": "Amazon.com Services LLC",  # API variant
+            "location": "US, WA, Seattle",
+            "job_path": "/en/jobs/123/tpm",
+            "description": "d",
+            "posted_date": "Jan 1, 2026",
+        }],
+    }).encode()
+    s = AmazonScraper()
+    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=body):
+        records = s.fetch_jobs("tpm")
+    assert len(records) == 1
+    assert records[0]["company"] == "Amazon"  # NOT "Amazon.com Services LLC"
+    assert records[0]["source_company"] == "Amazon"
