@@ -151,6 +151,7 @@ def test_get_does_not_retry_on_404():
             s._get("https://example.com/api")
     assert call_count["n"] == 1  # no retry
     assert sleep_mock.call_count == 0  # no backoff either
+    assert sleep_mock.call_args_list == []
 
 
 # --- _get proxy path ---
