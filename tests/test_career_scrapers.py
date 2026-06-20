@@ -278,3 +278,48 @@ def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
     assert len(records) == 1
     assert records[0]["company"] == "Amazon"  # NOT "Amazon.com Services LLC"
     assert records[0]["source_company"] == "Amazon"
+
+
+# --- Stub scrapers (tier-2 and tier-3) ---
+
+
+def test_google_scraper_returns_empty_until_endpoint_discovered():
+    from career_scrapers.google import GoogleScraper
+    s = GoogleScraper()
+    # Stub — must not raise.
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_meta_scraper_returns_empty_until_endpoint_discovered():
+    from career_scrapers.meta import MetaScraper
+    s = MetaScraper()
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_microsoft_scraper_returns_empty_until_endpoint_discovered():
+    from career_scrapers.microsoft import MicrosoftScraper
+    s = MicrosoftScraper()
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_apple_scraper_returns_empty_html_only():
+    from career_scrapers.apple import AppleScraper
+    s = AppleScraper()
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_nvidia_scraper_returns_empty_workday():
+    from career_scrapers.nvidia import NvidiaScraper
+    s = NvidiaScraper()
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_tesla_scraper_returns_empty_blocked():
+    from career_scrapers.tesla import TeslaScraper
+    s = TeslaScraper()
+    assert s.fetch_jobs("data scientist") == []
+
+
+def test_registry_contains_all_seven_big_tech():
+    expected = {"Apple", "Microsoft", "Google", "Amazon", "Meta", "Nvidia", "Tesla"}
+    assert set(SCRAPERS.keys()) == expected
