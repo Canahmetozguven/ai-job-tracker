@@ -79,11 +79,14 @@ def _run(args: argparse.Namespace) -> int:
     all_records = deduplicate_jobs(all_records)
 
     if not all_records:
-        if errors and len(errors) == len(SCRAPERS):
-            print("\nAll scrapers failed. Exiting 1.")
-            return 1
-        print("\nNo records to write. Exiting 0.")
-        return 0
+        # No records contributed by any scraper — either every scraper raised
+        # an exception, or every scraper returned [] (or a mix of both).
+        # Per spec, exit 1 in either case.
+        n_errored = len(errors)
+        n_total = len(SCRAPERS)
+        n_empty = n_total - n_errored
+        print(f"\nNo records from any scraper ({n_errored} errors, {n_empty} empty). Exiting 1.")
+        return 1
 
     new_count = append_jobs_jsonl(all_records, output, existing_urls)
     print(f"\nWrote {new_count} new job(s) to {output}")

@@ -31,7 +31,7 @@ def test_cli_help_shows_expected_flags(capsys):
         cs.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    for flag in ["--query", "--limit", "--proxy", "--output", "--append"]:
+    for flag in ["--query", "--limit", "--hours", "--output", "--append", "--no-proxy", "--proxy"]:
         assert flag in out
 
 
@@ -106,6 +106,38 @@ def test_cli_exits_1_when_all_scrapers_fail(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
              patch.object(AppleScraperMock, "fetch_jobs", boom):
+            with pytest.raises(SystemExit) as exc:
+                cs.main(["--query", "data scientist", "--output", output, "--append"])
+    assert exc.value.code == 1
+
+
+def test_cli_exits_1_when_all_scrapers_return_empty(tmp_path):
+    """Per spec: exit 1 if every scraper returned 0 records (no errors)."""
+    output = str(tmp_path / "out.jsonl")
+
+    def empty(self, query, limit=50):
+        return []
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
+        with patch.object(AmazonScraperMock, "fetch_jobs", empty), \
+             patch.object(AppleScraperMock, "fetch_jobs", empty):
+            with pytest.raises(SystemExit) as exc:
+                cs.main(["--query", "data scientist", "--output", output, "--append"])
+    assert exc.value.code == 1
+
+
+def test_cli_exits_1_when_some_error_and_others_empty(tmp_path):
+    """Per spec: exit 1 when every scraper is in some failure state (error OR empty)."""
+    output = str(tmp_path / "out.jsonl")
+
+    def boom(self, query, limit=50):
+        raise RuntimeError("upstream down")
+    def empty(self, query, limit=50):
+        return []
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
+        with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
+             patch.object(AppleScraperMock, "fetch_jobs", empty):
             with pytest.raises(SystemExit) as exc:
                 cs.main(["--query", "data scientist", "--output", output, "--append"])
     assert exc.value.code == 1
