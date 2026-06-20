@@ -193,19 +193,14 @@ def test_get_uses_proxy_opener_when_proxy_set():
 # --- AmazonScraper.fetch_jobs ---
 
 
-AMAZON_FIXTURE_PATH = (
-    Path(__file__).parent / "fixtures" / "career_sites" / "amazon.json"
-)
-
-
 def test_amazon_scraper_parses_fixture():
-    fake_body = AMAZON_FIXTURE_PATH.read_bytes()
+    fake_body = (Path(__file__).parent / "fixtures" / "career_sites" / "amazon.json").read_bytes()
     data = json.loads(fake_body)
     assert data.get("jobs"), "fixture must contain at least one job"
 
     s = AmazonScraper()
-    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=fake_body):
-        records = s.fetch_jobs("data scientist", limit=10)
+    s._get = MagicMock(return_value=fake_body)
+    records = s.fetch_jobs("data scientist", limit=10)
 
     assert isinstance(records, list)
     assert len(records) == len(data["jobs"])
@@ -218,18 +213,49 @@ def test_amazon_scraper_parses_fixture():
     # `company` is canonicalized to the scraper's `name`, never the API's variant
     # ("Amazon.com Services LLC").
     assert first["company"] == "Amazon"
-    assert first["job_url"].startswith("https://")
-    # Amazon returns a relative `job_path`; we must resolve it against the base URL.
-    assert first["job_url"].startswith("https://amazon.jobs/")
+    # Every record must have a resolvable absolute URL (base_url + job_path).
+    expected_first = data["jobs"][0]
+    assert first["job_url"] == f"{s.base_url}{expected_first['job_path']}"
     assert first["location"] == data["jobs"][0]["location"]
     assert first["date_posted"] == data["jobs"][0]["posted_date"]
+
+
+def test_amazon_scraper_uses_url_encoded_base_query():
+    """The scraper must URL-encode the query and use Amazon's `base_query`
+    parameter (not `keywords`, which Amazon ignores)."""
+    s = AmazonScraper()
+    s._get = MagicMock(return_value=b'{"jobs": []}')
+
+    s.fetch_jobs("data scientist")
+
+    # Assert the URL was built with the right param + encoding.
+    called_url = s._get.call_args[0][0]
+    assert "base_query=data+scientist" in called_url or "base_query=data%20scientist" in called_url
+    assert "keywords=" not in called_url
+
+
+def test_amazon_scraper_skips_jobs_missing_title_or_path():
+    """Records missing title or job_path must not be emitted (would create
+    unusable URLs or duplicate homepage entries)."""
+    s = AmazonScraper()
+    fake_body = b'''{
+        "jobs": [
+            {"title": "OK", "job_path": "/en/jobs/1/ok", "location": "X"},
+            {"title": "",   "job_path": "/en/jobs/2/missing-title", "location": "X"},
+            {"title": "NoPath", "job_path": "", "location": "X"}
+        ]
+    }'''
+    s._get = MagicMock(return_value=fake_body)
+    records = s.fetch_jobs("data scientist")
+    assert len(records) == 1
+    assert records[0]["title"] == "OK"
 
 
 def test_amazon_scraper_returns_empty_on_no_jobs():
     s = AmazonScraper()
     empty = b'{"hits": 0, "jobs": []}'
-    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=empty):
-        assert s.fetch_jobs("x") == []
+    s._get = MagicMock(return_value=empty)
+    assert s.fetch_jobs("x") == []
 
 
 def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
@@ -247,8 +273,8 @@ def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
         }],
     }).encode()
     s = AmazonScraper()
-    with patch("career_scrapers.amazon.BaseCareerScraper._get", return_value=body):
-        records = s.fetch_jobs("tpm")
+    s._get = MagicMock(return_value=body)
+    records = s.fetch_jobs("tpm")
     assert len(records) == 1
     assert records[0]["company"] == "Amazon"  # NOT "Amazon.com Services LLC"
     assert records[0]["source_company"] == "Amazon"
