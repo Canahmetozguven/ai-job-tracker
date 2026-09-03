@@ -1,3 +1,0 @@
-python-jobspy>=1.0.0
-linkedin-scraper>=3.0.0
-playwright

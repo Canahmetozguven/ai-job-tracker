@@ -336,8 +336,8 @@ def test_analyze_job_skips_jobs_below_score_threshold(mocker):
 
     send_message_mock = MagicMock()
 
-    mocker.patch("gemini_client.submit_to_gemini", mock_submit)
-    mocker.patch("telegram_notify.send_message", send_message_mock)
+    mocker.patch("analyzer.submit_to_gemini", mock_submit)
+    mocker.patch("analyzer.send_message", send_message_mock)
 
     job = {
         "title": "Junior Dev",

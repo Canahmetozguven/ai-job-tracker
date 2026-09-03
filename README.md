@@ -8,23 +8,28 @@ Automated job scraper + AI analyzer that evaluates job fit and sends results to 
 
 ## Quick Start
 
+Requires [uv](https://docs.astral.sh/uv/) and uses Python 3.12 (installed automatically by uv when needed).
+
 ```bash
 # 1. Install dependencies
 uv sync
 
-# 2. Configure environment
+# 2. Install the browser used by the Gemini integration
+uv run playwright install chromium
+
+# 3. Configure environment
 cp .env.example .env  # Add your Telegram bot token
 
-# 3. Add your CV
+# 4. Add your CV
 echo "Your CV text here..." > profile.txt
 
-# 4. Scrape jobs
+# 5. Scrape jobs
 uv run python scraper.py --query "data scientist" --location "Turkey" --hours 1
 
-# 5. Analyze with AI
+# 6. Analyze with AI
 uv run python analyzer.py --jobs jobs.jsonl --hours 1
 
-# 6. Or run everything automatically (cron/scheduler)
+# 7. Or run everything automatically (cron/scheduler)
 uv run python run_daily.py
 ```
 
@@ -100,7 +105,13 @@ uv run python run_daily.py
 
 ```bash
 uv sync
-# or: pip install python-jobspy linkedin-scraper playwright python-telegram-bot python-dotenv
+uv run playwright install chromium
+```
+
+`uv sync` installs the runtime dependencies and the `dev` dependency group from `pyproject.toml`. To run the test suite:
+
+```bash
+uv run pytest
 ```
 
 ### 2. Environment Variables
@@ -381,7 +392,8 @@ After each `run_daily.py` cycle, a summary report:
 ├── gemini_client.py      # Browser automation for Gemini
 ├── job_loader.py         # JSONL loader
 ├── profile.txt           # Your CV
-├── requirements.txt      # Dependencies
+├── pyproject.toml        # Project metadata and dependencies
+├── uv.lock               # Reproducible dependency lockfile
 ├── run_daily.py          # Scheduler (scraper + analyzer)
 ├── scraper.py            # Job scraper
 ├── telegram_notify.py    # Telegram notifications
