@@ -6,7 +6,7 @@ the JSON API is undocumented and likely needs browser dev-tools research
 to find the correct POST endpoint + parameters.
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class GoogleScraper(BaseCareerScraper):

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Job scraper CLI using JobSpy and LinkedIn-scraper with scheduled mode."""
 
-import argparse
 import asyncio
 import json
 import math
 import os
 import random
-import sys
 import time
-from config import match_big_tech
+from ai_job_tracker.config import match_big_tech
 from datetime import datetime
 from typing import Optional
 
@@ -304,99 +302,99 @@ async def run_daemon(config: dict, proxy: str = None):
         print(f"Next scrape in {config['interval']} minutes...")
         await asyncio.sleep(interval_seconds)
 
-def main():
-    parser = argparse.ArgumentParser(description="Job scraper with scheduled mode")
-    parser.add_argument("--query", "-q", help="Job search query")
-    parser.add_argument("--location", "-l", help="Location (city, state/country)")
-    parser.add_argument("--country", default="turkey",
-                        help="Country for JobSpy's country_indeed (e.g. turkey, worldwide, usa, uk). Default: turkey")
-    parser.add_argument("--big-tech", dest="big_tech", action="store_true",
-                        help="Post-filter results to Big Tech 7 companies (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla). Forces a global search; ignores --location.")
-    parser.add_argument("--source", "-s", type=int, default=1, choices=[1, 2, 3],
-                        help="1=JobSpy only, 2=LinkedIn only, 3=Both with fallback")
-    parser.add_argument("--limit", "-n", type=int, default=10, help="Results limit per source")
-    parser.add_argument("--output", "-o", default="jobs.jsonl", help="Output file path")
-    parser.add_argument("--daemon", "-d", action="store_true", help="Run continuously")
-    parser.add_argument("--interval", "-i", type=int, default=30, help="Interval in minutes (daemon mode)")
-    parser.add_argument("--hours", "-H", type=int, default=0, help="Filter jobs posted in last N hours (0=disabled)")
-    parser.add_argument("--append", "-a", action="store_true", help="Append to output file (don't overwrite)")
-    parser.add_argument("--no-proxy", action="store_true", help="Disable proxy rotation")
-    parser.add_argument("--proxy", help="Use a specific proxy instead of random")
+def prompt_for_options() -> dict:
+    """Collect scrape options interactively.
 
-    args = parser.parse_args()
-
-    # Interactive mode if no args provided
-    if len(sys.argv) == 1:
-        query = input("Enter job search query: ").strip()
-        location = input("Enter location (city, state/country): ").strip()
-        print("\nSelect source:")
-        print("  [1] JobSpy only (default)")
-        print("  [2] LinkedIn-scraper only")
-        print("  [3] Both with fallback (JobSpy → LinkedIn)")
-        while True:
-            choice = input("Choice [1]: ").strip() or "1"
-            if choice in ("1", "2", "3"):
-                source = int(choice)
+    Kept for the `--interactive` flag. Every key the caller needs is returned,
+    including the proxy/hours keys the old no-args branch forgot to set.
+    """
+    query = input("Enter job search query: ").strip()
+    location = input("Enter location (city, state/country): ").strip()
+    print("\nSelect source:")
+    print("  [1] JobSpy only (default)")
+    print("  [2] LinkedIn-scraper only")
+    print("  [3] Both with fallback (JobSpy → LinkedIn)")
+    while True:
+        choice = input("Choice [1]: ").strip() or "1"
+        if choice in ("1", "2", "3"):
+            source = int(choice)
+            break
+        print("Invalid choice")
+    while True:
+        limit_str = input("Results limit per source [10]: ").strip() or "10"
+        try:
+            limit = int(limit_str)
+            if limit > 0:
                 break
-            print("Invalid choice")
-        limit = 10
+        except ValueError:
+            pass
+        print("Please enter a positive number")
+    output = input("Output file [jobs.jsonl]: ").strip() or "jobs.jsonl"
+    append_mode = input("Append to file? [y/N]: ").strip().lower() == "y"
+    interval = 30
+    daemon = input("Run continuously? [y/N]: ").strip().lower() == "y"
+    if daemon:
         while True:
-            limit_str = input("Results limit per source [10]: ").strip() or "10"
+            interval_str = input("Interval in minutes [30]: ").strip() or "30"
             try:
-                limit = int(limit_str)
-                if limit > 0:
+                interval = int(interval_str)
+                if interval > 0:
                     break
             except ValueError:
                 pass
             print("Please enter a positive number")
-        output = input("Output file [jobs.jsonl]: ").strip() or "jobs.jsonl"
-        append_mode = input("Append to file? [y/N]: ").strip().lower() == "y"
-        interval = 30
-        daemon = input("Run continuously? [y/N]: ").strip().lower() == "y"
-        if daemon:
-            while True:
-                interval_str = input("Interval in minutes [30]: ").strip() or "30"
-                try:
-                    interval = int(interval_str)
-                    if interval > 0:
-                        break
-                except ValueError:
-                    pass
-        country = "turkey"
-        big_tech = False
-    else:
-        query = args.query or input("Enter job search query: ").strip() if not args.query else args.query
-        source = args.source
-        limit = args.limit
-        output = args.output
-        append_mode = args.append
-        daemon = args.daemon
-        interval = args.interval
-        hours_old = args.hours
-        no_proxy = args.no_proxy
-        specific_proxy = args.proxy
-        country = args.country
-        big_tech = args.big_tech
-        # --big-tech forces a global search; skip the location prompt so the
-        # script can run noninteractively (cron, redirected stdin).
-        if big_tech:
-            location = None
-        else:
-            location = args.location or input("Enter location (city, state/country): ").strip() if not args.location else args.location
+    return {
+        "query": query,
+        "location": location,
+        "source": source,
+        "limit": limit,
+        "output": output,
+        "append_mode": append_mode,
+        "daemon": daemon,
+        "interval": interval,
+        "country": "turkey",
+        "big_tech": False,
+        # The old no-args branch never bound these three, so referencing
+        # no_proxy below raised UnboundLocalError. Bind them explicitly.
+        "hours_old": 0,
+        "no_proxy": False,
+        "specific_proxy": None,
+    }
 
-    # Load proxies
+
+def run_cli(
+    *,
+    query: str,
+    location: str | None = None,
+    country: str = "turkey",
+    big_tech: bool = False,
+    source: int = 1,
+    limit: int = 10,
+    output: str = "jobs.jsonl",
+    daemon: bool = False,
+    interval: int = 30,
+    hours_old: int = 0,
+    append_mode: bool = False,
+    no_proxy: bool = False,
+    specific_proxy: str | None = None,
+) -> None:
+    """Run a scrape (or daemon loop) with fully resolved options.
+
+    Parsing lives in ai_job_tracker.cli; this takes settled values only.
+    """
+    # --big-tech forces a global search and ignores --location.
+    if big_tech:
+        location = None
+
     proxies = [] if no_proxy else load_proxies(PROXY_FILE)
     if proxies:
         print(f"Loaded {len(proxies)} proxies from {PROXY_FILE}")
     else:
         print("No proxies loaded (using direct connection)")
 
-    # Determine proxy for this run
     run_proxy = specific_proxy if specific_proxy else (random.choice(proxies) if proxies else None)
     if run_proxy:
         print(f"Using proxy: {run_proxy}")
-
-    source_pass = "big_tech_global" if big_tech else "turkey_local"
 
     config = {
         "query": query,
@@ -407,7 +405,7 @@ def main():
         "interval": interval,
         "hours_old": hours_old,
         "country": country,
-        "source_pass": source_pass,
+        "source_pass": "big_tech_global" if big_tech else "turkey_local",
         "big_tech": big_tech,
     }
 
@@ -417,17 +415,22 @@ def main():
 
     if daemon:
         asyncio.run(run_daemon(config, run_proxy))
-    else:
-        async def run_once():
-            existing_urls = read_existing_jobs(config["output"])
-            jobs = await run_scrape(config, run_proxy)
-            if config.get("big_tech"):
-                before = len(jobs)
-                jobs = filter_big_tech(jobs)
-                print(f"  big_tech filter kept {len(jobs)} of {before} records")
-            new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
-            print(f"Wrote {new_count} new jobs to {config['output']}")
-        asyncio.run(run_once())
+        return
 
-if __name__ == "__main__":
-    main()
+    async def run_once():
+        existing_urls = read_existing_jobs(config["output"])
+        jobs = await run_scrape(config, run_proxy)
+        if config.get("big_tech"):
+            before = len(jobs)
+            jobs = filter_big_tech(jobs)
+            print(f"  big_tech filter kept {len(jobs)} of {before} records")
+        new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        print(f"Wrote {new_count} new jobs to {config['output']}")
+
+    asyncio.run(run_once())
+
+
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()

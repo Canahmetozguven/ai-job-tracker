@@ -5,7 +5,7 @@ Their careers site is a SPA; the JSON API powering it is discoverable via
 browser dev-tools network inspection.
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class MicrosoftScraper(BaseCareerScraper):

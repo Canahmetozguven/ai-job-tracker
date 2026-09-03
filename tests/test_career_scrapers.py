@@ -8,9 +8,9 @@ from unittest.mock import call, patch, MagicMock
 
 import pytest
 
-from career_scrapers import SCRAPERS
-from career_scrapers.amazon import AmazonScraper
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers import SCRAPERS
+from ai_job_tracker.career_scrapers.amazon import AmazonScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 # --- registry ---
@@ -114,8 +114,8 @@ def test_get_retries_on_5xx_then_succeeds():
         m.read.return_value = b'{"ok": true}'
         return m
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=fake_urlopen), \
-         patch("career_scrapers.base.time.sleep") as sleep_mock:
+    with patch("ai_job_tracker.career_scrapers.base.urllib.request.urlopen", side_effect=fake_urlopen), \
+         patch("ai_job_tracker.career_scrapers.base.time.sleep") as sleep_mock:
         body = s._get("https://example.com/api")
     assert body == b'{"ok": true}'
     assert call_count["n"] == 3
@@ -130,8 +130,8 @@ def test_get_raises_after_max_retries():
     def always_503(req, timeout):
         raise urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", {}, None)
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_503), \
-         patch("career_scrapers.base.time.sleep") as sleep_mock:
+    with patch("ai_job_tracker.career_scrapers.base.urllib.request.urlopen", side_effect=always_503), \
+         patch("ai_job_tracker.career_scrapers.base.time.sleep") as sleep_mock:
         with pytest.raises(urllib.error.HTTPError):
             s._get("https://example.com/api")
     # max_retries=2 means 2 attempts total, with 1 backoff sleep between them.
@@ -147,8 +147,8 @@ def test_get_does_not_retry_on_404():
         call_count["n"] += 1
         raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
 
-    with patch("career_scrapers.base.urllib.request.urlopen", side_effect=always_404), \
-         patch("career_scrapers.base.time.sleep") as sleep_mock:
+    with patch("ai_job_tracker.career_scrapers.base.urllib.request.urlopen", side_effect=always_404), \
+         patch("ai_job_tracker.career_scrapers.base.time.sleep") as sleep_mock:
         with pytest.raises(urllib.error.HTTPError):
             s._get("https://example.com/api")
     assert call_count["n"] == 1  # no retry
@@ -170,10 +170,10 @@ def test_get_uses_proxy_opener_when_proxy_set():
     fake_opener.open.return_value = fake_response
 
     with patch(
-        "career_scrapers.base.urllib.request.build_opener", return_value=fake_opener
+        "ai_job_tracker.career_scrapers.base.urllib.request.build_opener", return_value=fake_opener
     ) as build_opener_mock, \
-         patch("career_scrapers.base.urllib.request.ProxyHandler") as proxy_handler_mock, \
-         patch("career_scrapers.base.urllib.request.urlopen") as urlopen_mock:
+         patch("ai_job_tracker.career_scrapers.base.urllib.request.ProxyHandler") as proxy_handler_mock, \
+         patch("ai_job_tracker.career_scrapers.base.urllib.request.urlopen") as urlopen_mock:
         body = s._get("https://example.com/api")
 
     assert body == b'{"via": "proxy"}'
@@ -284,38 +284,38 @@ def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
 
 
 def test_google_scraper_returns_empty_until_endpoint_discovered():
-    from career_scrapers.google import GoogleScraper
+    from ai_job_tracker.career_scrapers.google import GoogleScraper
     s = GoogleScraper()
     # Stub — must not raise.
     assert s.fetch_jobs("data scientist") == []
 
 
 def test_meta_scraper_returns_empty_until_endpoint_discovered():
-    from career_scrapers.meta import MetaScraper
+    from ai_job_tracker.career_scrapers.meta import MetaScraper
     s = MetaScraper()
     assert s.fetch_jobs("data scientist") == []
 
 
 def test_microsoft_scraper_returns_empty_until_endpoint_discovered():
-    from career_scrapers.microsoft import MicrosoftScraper
+    from ai_job_tracker.career_scrapers.microsoft import MicrosoftScraper
     s = MicrosoftScraper()
     assert s.fetch_jobs("data scientist") == []
 
 
 def test_apple_scraper_returns_empty_html_only():
-    from career_scrapers.apple import AppleScraper
+    from ai_job_tracker.career_scrapers.apple import AppleScraper
     s = AppleScraper()
     assert s.fetch_jobs("data scientist") == []
 
 
 def test_nvidia_scraper_returns_empty_workday():
-    from career_scrapers.nvidia import NvidiaScraper
+    from ai_job_tracker.career_scrapers.nvidia import NvidiaScraper
     s = NvidiaScraper()
     assert s.fetch_jobs("data scientist") == []
 
 
 def test_tesla_scraper_returns_empty_blocked():
-    from career_scrapers.tesla import TeslaScraper
+    from ai_job_tracker.career_scrapers.tesla import TeslaScraper
     s = TeslaScraper()
     assert s.fetch_jobs("data scientist") == []
 

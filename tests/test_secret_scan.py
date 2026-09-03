@@ -1,6 +1,15 @@
+import importlib.util
+from pathlib import Path
+
 import pytest
 
-from scripts.check_secrets import find_secrets
+# scripts/ is a repo tool, not part of the installed package, so load it by path.
+_spec = importlib.util.spec_from_file_location(
+    "check_secrets", Path(__file__).resolve().parents[1] / "scripts" / "check_secrets.py"
+)
+_check_secrets = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_check_secrets)
+find_secrets = _check_secrets.find_secrets
 
 
 def test_secret_scan_detects_telegram_bot_token():

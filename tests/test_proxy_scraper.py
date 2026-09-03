@@ -17,7 +17,7 @@ class FakeResponse:
 
 
 def load_module():
-    import proxy_scraper
+    from ai_job_tracker import proxy_scraper
 
     return proxy_scraper
 
@@ -162,7 +162,7 @@ def test_scrape_all_fetches_all_sources_and_saves(tmp_path, monkeypatch):
     ]
 
 
-def test_main_with_source_argument_fetches_only_requested_source(tmp_path, monkeypatch):
+def test_scrape_with_source_argument_fetches_only_requested_source(tmp_path, monkeypatch):
     proxy_scraper = load_module()
 
     called = []
@@ -183,7 +183,7 @@ def test_main_with_source_argument_fetches_only_requested_source(tmp_path, monke
     monkeypatch.setattr(proxy_scraper, "save_proxies", fake_save_proxies)
 
     output = tmp_path / "custom" / "out.txt"
-    result = proxy_scraper.main(["--source", "2", "--output", str(output)])
+    result = proxy_scraper.scrape(source=2, output=str(output))
 
     assert called == ["free"]
     assert captured["proxies"] == ["2.2.2.2:8080"]
