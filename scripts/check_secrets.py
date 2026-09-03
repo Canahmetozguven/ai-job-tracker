@@ -10,9 +10,14 @@ from pathlib import Path
 
 
 TELEGRAM_TOKEN = re.compile(r"\b\d{8,10}:" + r"[A-Za-z0-9_-]{30,}\b")
-PRIVATE_KEY = re.compile(r"-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----")
+PRIVATE_KEY = re.compile(
+    r"-----BEGIN (?:(?:DSA|EC|ENCRYPTED|OPENSSH|RSA) )?PRIVATE KEY-----"
+)
 CREDENTIAL_ASSIGNMENT = re.compile(
-    r"(?i)\b(?:api[_-]?key|access[_-]?token|bot[_-]?token|password|secret)\b"
+    r"(?i)(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*"
+    r"(?:api[_-]?key|access[_-]?token|bot[_-]?token|password|secret)"
+    r"(?:[_-][A-Za-z0-9]+)*"
+    r"(?![A-Za-z0-9_])"
     r"\s*[:=]\s*[\"']?([A-Za-z0-9_./+=-]{20,})"
 )
 PLACEHOLDERS = ("example", "placeholder", "redacted", "your-")

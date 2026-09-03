@@ -1,3 +1,5 @@
+import pytest
+
 from scripts.check_secrets import find_secrets
 
 
@@ -9,3 +11,19 @@ def test_secret_scan_detects_telegram_bot_token():
 
 def test_secret_scan_allows_documented_placeholders():
     assert find_secrets("TELEGRAM_BOT_TOKEN=your-bot-token-here") == []
+
+
+@pytest.mark.parametrize(
+    "variable_name",
+    ["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY", "SERVICE_PASSWORD"],
+)
+def test_secret_scan_detects_prefixed_credential_names(variable_name):
+    assignment = f"{variable_name}=sk-" + "A" * 32
+
+    assert "credential assignment" in find_secrets(assignment)
+
+
+def test_secret_scan_detects_encrypted_pkcs8_private_key():
+    header = "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----"
+
+    assert "private key" in find_secrets(header)
