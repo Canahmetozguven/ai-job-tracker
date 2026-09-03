@@ -329,15 +329,15 @@ def test_analyze_job_skips_jobs_below_score_threshold(mocker):
     """Jobs with score < 6 should not be sent to Telegram."""
     import analyzer as a_module
     import asyncio
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock
 
     async def mock_submit(*args, **kwargs):
         return "FIT SCORE: 4/10\nWHY GOOD: Python match\nWHY BAD: Low salary\nRECOMMENDATION: Skip"
 
-    send_message_mock = MagicMock()
+    send_message_mock = AsyncMock()
 
-    mocker.patch("gemini_client.submit_to_gemini", mock_submit)
-    mocker.patch("telegram_notify.send_message", send_message_mock)
+    mocker.patch.object(a_module, "submit_to_gemini", mock_submit)
+    mocker.patch.object(a_module, "send_message", send_message_mock)
 
     job = {
         "title": "Junior Dev",

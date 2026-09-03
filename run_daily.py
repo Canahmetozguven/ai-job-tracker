@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Job scraper + analyzer runner for cron jobs with proxy validation + retry."""
 
+import argparse
 import asyncio
 import json
 import os
@@ -10,7 +11,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from config import TELEGRAM_BOT_TOKEN, DEFAULT_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, require_telegram_credentials
 from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
 import telegram_notify
 import telegram
@@ -43,13 +44,20 @@ def print_header(title: str):
     print(f"  {title}")
     print(f"{'='*60}")
 
-def send_telegram_summary(summary: dict):
+def send_telegram_summary(
+    summary: dict,
+    chat_id: str | None = TELEGRAM_CHAT_ID,
+):
     """Send run summary to Telegram."""
     try:
+        telegram_token, chat_id = require_telegram_credentials(
+            TELEGRAM_BOT_TOKEN,
+            chat_id,
+        )
         message = telegram_notify.format_run_summary(summary)
-        bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+        bot = telegram.Bot(token=telegram_token)
         asyncio.run(bot.send_message(
-            chat_id=DEFAULT_CHAT_ID,
+            chat_id=chat_id,
             text=message,
             parse_mode=telegram.constants.ParseMode.MARKDOWN
         ))
@@ -57,7 +65,10 @@ def send_telegram_summary(summary: dict):
     except Exception as e:
         print(f"⚠️ Failed to send Telegram summary: {e}")
 
-def print_summary(send_tg: bool = True):
+def print_summary(
+    send_tg: bool = True,
+    chat_id: str | None = TELEGRAM_CHAT_ID,
+):
     """Print comprehensive run summary."""
     print_header("RUN SUMMARY")
 
@@ -141,7 +152,7 @@ def print_summary(send_tg: bool = True):
 
     # Send to Telegram
     if send_tg:
-        send_telegram_summary(run_summary)
+        send_telegram_summary(run_summary, chat_id)
 
 def validate_proxies() -> list[str]:
     """Re-validate proxy list, return working ones."""
@@ -238,7 +249,20 @@ def _update_pass_summary(pass_key: str, scrape_ok: bool) -> None:
     bucket["found"] = count_total
     bucket["new"] = count_recent
 
-def main():
+def main(argv: list[str] | None = None):
+    parser = argparse.ArgumentParser(description="Run the daily job-tracking pipeline")
+    parser.add_argument(
+        "--chat-id",
+        default=TELEGRAM_CHAT_ID,
+        help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        _, chat_id = require_telegram_credentials(TELEGRAM_BOT_TOKEN, args.chat_id)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Job scraper + analyzer starting...")
     
     # Step 1: Re-validate proxies (fresh list each run)
@@ -246,7 +270,7 @@ def main():
     if not proxies:
         # Scrape passes never run, so they keep their default "not_run" status.
         run_summary["analyze"]["status"] = "failed"
-        print_summary()
+        print_summary(chat_id=chat_id)
         sys.exit(1)
 
     proxy = random.choice(proxies)
@@ -298,7 +322,7 @@ def main():
 
     if not (scrape_ok_a or scrape_ok_b or scrape_ok_c):
         run_summary["analyze"]["status"] = "skipped"
-        print_summary()
+        print_summary(chat_id=chat_id)
         sys.exit(1)
 
     # Step 3: Analyze
@@ -308,7 +332,8 @@ def main():
         PYTHON, "analyzer.py",
         "--jobs", "jobs_linkedin.jsonl",
         "--hours", "1",
-        "--skip-seen"
+        "--skip-seen",
+        "--chat-id", chat_id,
     ], "Analyzing jobs with Gemini")
 
     new_analysis_results = read_jsonl_records("analysis_results.jsonl", analysis_results_before)
@@ -321,8 +346,8 @@ def main():
     if not analyze_ok:
         run_summary["errors"].append("Analysis failed")
 
-    print_summary()
+    print_summary(chat_id=chat_id)
     print("\nDone!")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

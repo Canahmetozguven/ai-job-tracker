@@ -32,7 +32,7 @@ job_analyzer/
 """Configuration for job analyzer."""
 
 # Telegram Bot Token
-TELEGRAM_BOT_TOKEN = "8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w"
+TELEGRAM_BOT_TOKEN = "REDACTED_TELEGRAM_BOT_TOKEN"
 
 # Browser Profile Path (Brave backup from other computer)
 BROWSER_PROFILE_PATH = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
@@ -70,7 +70,7 @@ Respond with EXACTLY this format:
 ```python
 """Configuration for job analyzer."""
 
-TELEGRAM_BOT_TOKEN = "8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w"
+TELEGRAM_BOT_TOKEN = "REDACTED_TELEGRAM_BOT_TOKEN"
 BROWSER_PROFILE_PATH = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
 PROFILE_FILE = "profile.txt"
 JOBS_INPUT_FILE = "jobs.jsonl"

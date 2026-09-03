@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-secrets
+        name: Check for committed credentials
+        entry: python3 scripts/check_secrets.py
+        language: system
+        types: [text]

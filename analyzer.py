@@ -11,7 +11,8 @@ from config import (
     PROFILE_FILE,
     JOBS_INPUT_FILE,
     ANALYSIS_OUTPUT_FILE,
-    DEFAULT_CHAT_ID
+    TELEGRAM_CHAT_ID,
+    require_telegram_credentials,
 )
 from user_profile import load_profile
 from job_loader import load_jobs
@@ -19,7 +20,6 @@ from telegram_notify import send_message, format_job_analysis, parse_gemini_resp
 from gemini_client import submit_to_gemini, build_prompt
 from analysis_validation import is_valid_analysis
 
-CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds
 
@@ -81,6 +81,7 @@ async def analyze_job(
     browser_path: str,
     max_retries: int = 3,
     browser_executable: str | None = None,
+    telegram_token: str | None = TELEGRAM_BOT_TOKEN,
 ) -> dict:
     """Analyze single job with Gemini and send to Telegram.
 
@@ -140,7 +141,9 @@ async def analyze_job(
 
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
-    await send_message(chat_id, message, TELEGRAM_BOT_TOKEN)
+    if not telegram_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is required before sending notifications")
+    await send_message(chat_id, message, telegram_token)
     print(f"  ✓ Sent to Telegram")
     return {
         'job': job,
@@ -165,10 +168,23 @@ async def main():
         help="Optional browser executable for Gemini; falls back to common browsers or bundled Chromium",
     )
     parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
+    parser.add_argument(
+        "--chat-id",
+        default=TELEGRAM_CHAT_ID,
+        help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
+    )
     parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
     parser.add_argument("--skip-seen", action="store_true", help="Skip jobs with successful analysis already recorded")
     parser.add_argument("--retries", type=int, default=MAX_RETRIES, help="Max retries per job on Gemini failure")
     args = parser.parse_args()
+
+    try:
+        telegram_token, chat_id = require_telegram_credentials(
+            TELEGRAM_BOT_TOKEN,
+            args.chat_id,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     print(f"Loading profile from {args.profile}...")
     profile = load_profile(args.profile)
@@ -206,10 +222,11 @@ async def main():
             result = await analyze_job(
                 job,
                 profile,
-                CHAT_ID,
+                chat_id,
                 args.browser_path,
                 args.retries,
                 args.browser_executable,
+                telegram_token,
             )
             save_result(result, args.output)
             success_count += 1
