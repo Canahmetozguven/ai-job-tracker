@@ -1,6 +1,26 @@
 """Unit tests for config.py helpers."""
 
-from config import BIG_TECH_COMPANIES, match_big_tech
+import pytest
+
+from config import BIG_TECH_COMPANIES, match_big_tech, require_telegram_credentials
+
+
+def test_require_telegram_credentials_returns_stripped_values():
+    assert require_telegram_credentials(" token ", " chat ") == ("token", "chat")
+
+
+@pytest.mark.parametrize(
+    "token, chat_id, missing_name",
+    [
+        (None, "123", "TELEGRAM_BOT_TOKEN"),
+        ("token", None, "TELEGRAM_CHAT_ID"),
+        (" ", "123", "TELEGRAM_BOT_TOKEN"),
+        ("token", " ", "TELEGRAM_CHAT_ID"),
+    ],
+)
+def test_require_telegram_credentials_rejects_missing_values(token, chat_id, missing_name):
+    with pytest.raises(ValueError, match=missing_name):
+        require_telegram_credentials(token, chat_id)
 
 
 def test_match_big_tech_canonical():

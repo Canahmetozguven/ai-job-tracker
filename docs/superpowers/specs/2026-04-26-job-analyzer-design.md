@@ -26,7 +26,7 @@ jobs.jsonl → Job Analyzer → Gemini (browser) → Telegram Bot → Your Chat
 - No login needed if session is valid
 
 ### Telegram Integration
-- Bot token: `8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w`
+- Bot token: `REDACTED_TELEGRAM_BOT_TOKEN`
 - Send formatted results to configured chat ID
 
 ### Flow
@@ -43,7 +43,7 @@ jobs.jsonl → Job Analyzer → Gemini (browser) → Telegram Bot → Your Chat
 | Item | Source |
 |------|--------|
 | Browser profile | `USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data` |
-| Telegram bot | `8647111790:AAEkQaOy9JbqYVXRfDCYBHhnJS97VzHif_w` |
+| Telegram bot | `REDACTED_TELEGRAM_BOT_TOKEN` |
 | Profile data | `profile.txt` (user provides) |
 
 ## Prompt Template
