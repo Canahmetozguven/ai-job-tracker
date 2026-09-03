@@ -8,6 +8,8 @@ import pytest
 
 from typer.testing import CliRunner
 
+from conftest import CLI_ENV, plain
+
 from ai_job_tracker import career_scraper as cs
 from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 from ai_job_tracker.cli import app
@@ -30,10 +32,11 @@ class AppleScraperMock(BaseCareerScraper):
 
 
 def test_career_help_shows_expected_flags():
-    result = CliRunner().invoke(app, ["career", "--help"])
+    result = CliRunner(env=CLI_ENV).invoke(app, ["career", "--help"])
     assert result.exit_code == 0
+    out = plain(result.output)
     for flag in ["--query", "--limit", "--hours", "--output", "--append", "--no-proxy", "--proxy"]:
-        assert flag in result.output
+        assert flag in out
 
 
 def test_career_command_propagates_exit_code(tmp_path):
@@ -44,14 +47,14 @@ def test_career_command_propagates_exit_code(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
              patch.object(AppleScraperMock, "fetch_jobs", boom):
-            result = CliRunner().invoke(
+            result = CliRunner(env=CLI_ENV).invoke(
                 app, ["career", "--query", "ds", "--output", str(tmp_path / "o.jsonl")]
             )
     assert result.exit_code == 1
 
 
 def test_career_requires_query():
-    result = CliRunner().invoke(app, ["career", "--output", "x.jsonl"])
+    result = CliRunner(env=CLI_ENV).invoke(app, ["career", "--output", "x.jsonl"])
     assert result.exit_code != 0
 
 
