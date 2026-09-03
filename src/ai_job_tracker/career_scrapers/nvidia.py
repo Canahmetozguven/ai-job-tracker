@@ -6,7 +6,7 @@ to obtain a CSRF token, then subsequent API calls. The session flow +
 API surface need separate research and a custom client.
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class NvidiaScraper(BaseCareerScraper):

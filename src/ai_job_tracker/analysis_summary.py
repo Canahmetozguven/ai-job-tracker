@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from analysis_validation import is_valid_analysis
+from ai_job_tracker.analysis_validation import is_valid_analysis
 
 
 def count_jsonl_lines(path: str) -> int:

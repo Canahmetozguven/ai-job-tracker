@@ -5,14 +5,14 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
-import run_daily
-from user_profile import load_profile
-from job_loader import load_jobs, count_jobs
-from analyzer import get_seen_urls
-from analysis_validation import is_valid_analysis
-from gemini_client import build_prompt, resolve_browser_executable
-from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
-from telegram_notify import format_job_analysis, format_run_summary, parse_gemini_response
+from ai_job_tracker import run_daily
+from ai_job_tracker.user_profile import load_profile
+from ai_job_tracker.job_loader import load_jobs, count_jobs
+from ai_job_tracker.analyzer import get_seen_urls
+from ai_job_tracker.analysis_validation import is_valid_analysis
+from ai_job_tracker.gemini_client import build_prompt, resolve_browser_executable
+from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
+from ai_job_tracker.telegram_notify import format_job_analysis, format_run_summary, parse_gemini_response
 
 def test_load_profile(tmp_path):
     """Test profile loading."""
@@ -207,7 +207,7 @@ def test_build_prompt_boosts_scores_for_data_related_roles():
     """Data-related roles (data engineer, ML engineer, analyst, etc.) should get
     score 6+ even if only slightly related to the profile. Data science roles
     specifically should get 10/10."""
-    from config import PROMPT_TEMPLATE
+    from ai_job_tracker.config import PROMPT_TEMPLATE
 
     # Check guidance section of PROMPT_TEMPLATE directly
     lower_template = PROMPT_TEMPLATE.lower()
@@ -312,7 +312,7 @@ def test_summarize_analysis_results_handles_no_jobs_and_partial_and_failed():
 
 
 def test_resolve_browser_executable_accepts_explicit_browser_command(monkeypatch):
-    monkeypatch.setattr("gemini_client.shutil.which", lambda command: "/usr/bin/brave-browser" if command == "brave-browser" else None)
+    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: "/usr/bin/brave-browser" if command == "brave-browser" else None)
 
     assert resolve_browser_executable("brave-browser") == "/usr/bin/brave-browser"
 
@@ -327,7 +327,7 @@ def test_resolve_browser_executable_accepts_explicit_executable_path(tmp_path):
 
 def test_analyze_job_skips_jobs_below_score_threshold(mocker):
     """Jobs with score < 6 should not be sent to Telegram."""
-    import analyzer as a_module
+    from ai_job_tracker import analyzer as a_module
     import asyncio
     from unittest.mock import AsyncMock
 
@@ -360,7 +360,7 @@ def test_resolve_browser_executable_returns_none_by_default_for_automation(monke
     recommended for automated Gemini interaction.
     """
     monkeypatch.setattr(
-        "gemini_client.shutil.which",
+        "ai_job_tracker.gemini_client.shutil.which",
         lambda command: "/usr/bin/brave-origin-nightly" if command == "brave-origin-nightly" else None,
     )
 
@@ -368,7 +368,7 @@ def test_resolve_browser_executable_returns_none_by_default_for_automation(monke
 
 
 def test_resolve_browser_executable_rejects_missing_explicit_command(monkeypatch):
-    monkeypatch.setattr("gemini_client.shutil.which", lambda command: None)
+    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: None)
 
     with pytest.raises(FileNotFoundError, match="missing-browser"):
         resolve_browser_executable("missing-browser")
@@ -381,7 +381,7 @@ def test_resolve_browser_executable_rejects_missing_explicit_path(tmp_path):
 
 
 def test_resolve_browser_executable_returns_none_without_browser_on_path(monkeypatch):
-    monkeypatch.setattr("gemini_client.shutil.which", lambda command: None)
+    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: None)
 
     assert resolve_browser_executable() is None
 
@@ -524,7 +524,7 @@ def test_print_summary_marks_partial_analysis_as_issues_detected_and_partial_sta
 
 def test_format_run_summary_renders_three_pass_breakdown():
     """Three-pass summary: render one row per pass (Turkey + Big Tech 7 + Career sites)."""
-    from telegram_notify import format_run_summary
+    from ai_job_tracker.telegram_notify import format_run_summary
     summary = {
         "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
         "scrape": {
@@ -544,7 +544,7 @@ def test_format_run_summary_renders_three_pass_breakdown():
 
 
 def test_format_run_summary_career_site_failure_does_not_kill_run():
-    from telegram_notify import format_run_summary
+    from ai_job_tracker.telegram_notify import format_run_summary
     summary = {
         "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
         "scrape": {

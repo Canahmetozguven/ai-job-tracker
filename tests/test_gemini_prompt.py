@@ -1,6 +1,6 @@
 """Tests for prompt building — the profile must reach the prompt."""
 
-from gemini_client import build_prompt
+from ai_job_tracker.gemini_client import build_prompt
 
 JOB = {
     "title": "Data Scientist",
@@ -31,8 +31,8 @@ def test_no_operator_identity_in_application_code():
     """Config must not ship anyone's CV or personal contact details."""
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1]
+    package = Path(__file__).resolve().parents[1] / "src" / "ai_job_tracker"
     for name in ("config.py", "analyzer.py"):
-        source = (root / name).read_text()
+        source = (package / name).read_text()
         for leak in ("1949164657", "@gmail.com", "05396879669", "CAN AHMET"):
             assert leak not in source, f"{name} still embeds {leak}"

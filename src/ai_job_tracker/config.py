@@ -1,16 +1,67 @@
-"""Configuration for job analyzer."""
+"""Configuration for job analyzer.
 
-import os
-from dotenv import load_dotenv
+Every operator-tunable value lives on :class:`Settings` and is read from the
+environment or a `.env` file. Field names map to their upper-case env var
+(``profile_file`` <- ``PROFILE_FILE``), so `.env.example` documents the full
+surface. Nothing here is hard-coded per-machine.
+"""
 
-load_dotenv()
+from typing import Any
 
-# Telegram Bot Token (bot that sends messages)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Telegram destination. There is deliberately no repository-owned fallback:
-# operators must choose the destination in their environment or on the CLI.
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+class Settings(BaseSettings):
+    """Operator-tunable settings, sourced from the environment or `.env`."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Telegram bot that sends messages. Both credentials stay optional here so
+    # that scrape-only entry points start without them; require_telegram_credentials
+    # is the trust boundary that fails before anything is sent.
+    telegram_bot_token: str | None = None
+    # Telegram destination. There is deliberately no repository-owned fallback:
+    # operators must choose the destination in their environment or on the CLI.
+    telegram_chat_id: str | None = None
+
+    # Brave profile holding an authenticated Gemini session.
+    browser_profile_path: str = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
+    # Optional browser executable for Gemini automation; None means Playwright
+    # falls back to common browsers on PATH, then its bundled Chromium.
+    gemini_browser_executable: str | None = None
+    gemini_url: str = "https://gemini.google.com/app"
+
+    # Default file paths, relative to the working directory the CLI runs in.
+    profile_file: str = "profile.txt"
+    jobs_input_file: str = "jobs.jsonl"
+    analysis_output_file: str = "analysis_results.jsonl"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_means_unset(cls, data: Any) -> Any:
+        """Drop blank values so field defaults apply.
+
+        `.env.example` ships keys with empty values (``TELEGRAM_BOT_TOKEN=``),
+        and the previous ``os.getenv(...) or default`` idiom treated those as
+        absent. Removing the key here preserves that, rather than letting an
+        empty string override a real default.
+        """
+        if isinstance(data, dict):
+            return {
+                key: value
+                for key, value in data.items()
+                if not (isinstance(value, str) and not value.strip())
+            }
+        return data
+
+
+settings = Settings()
 
 
 def require_telegram_credentials(
@@ -27,21 +78,8 @@ def require_telegram_credentials(
         raise ValueError(f"Missing required Telegram configuration: {', '.join(missing)}")
     return token.strip(), chat_id.strip()
 
-# Browser Profile Path (Brave backup with authenticated session)
-BROWSER_PROFILE_PATH = os.getenv("BROWSER_PROFILE_PATH") or "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
-
-# Optional browser executable for Gemini automation
-GEMINI_BROWSER_EXECUTABLE = os.getenv("GEMINI_BROWSER_EXECUTABLE") or None
-
-# Default file paths
-PROFILE_FILE = "profile.txt"
-JOBS_INPUT_FILE = "jobs.jsonl"
-ANALYSIS_OUTPUT_FILE = "analysis_results.jsonl"
-
-# Gemini settings
-GEMINI_URL = "https://gemini.google.com/app"
-
-# Prompt template for Gemini analysis
+# Prompt template for Gemini analysis. Not a setting: the selected profile's
+# contents are inserted at runtime, while the template stays constant.
 PROMPT_TEMPLATE = """Analyze this job posting for an actionable shortlist decision.
 
 MY PROFILE:

@@ -1,6 +1,6 @@
 import math
 import pytest
-from scraper import deduplicate_jobs, df_to_job_records, filter_big_tech, _clean
+from ai_job_tracker.scraper import deduplicate_jobs, df_to_job_records, filter_big_tech, _clean
 
 def test_deduplicate_jobs():
     jobs = [

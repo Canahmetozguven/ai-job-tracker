@@ -6,7 +6,7 @@ GraphQL POST. The query language and authentication mechanism need
 further research.
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class MetaScraper(BaseCareerScraper):

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Job scraper + analyzer runner for cron jobs with proxy validation + retry."""
 
-import argparse
 import asyncio
 import json
 import os
@@ -11,14 +10,16 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, require_telegram_credentials
-from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
-import telegram_notify
+from ai_job_tracker.config import require_telegram_credentials, settings
+from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
+from ai_job_tracker import telegram_notify
 import telegram
-import proxy_scraper
+from ai_job_tracker import proxy_scraper
 
-# Use the venv Python explicitly — sys.executable may resolve to system Python in cron
-PYTHON = "/home/can/Desktop/job/.venv/bin/python"
+# Child steps run as `-m` modules under the *same* interpreter running this
+# process. Launched via the `job-daily` console script, sys.executable is the
+# venv Python, so cron needs no absolute path baked in.
+PYTHON = sys.executable
 
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds between retries
@@ -46,12 +47,12 @@ def print_header(title: str):
 
 def send_telegram_summary(
     summary: dict,
-    chat_id: str | None = TELEGRAM_CHAT_ID,
+    chat_id: str | None = settings.telegram_chat_id,
 ):
     """Send run summary to Telegram."""
     try:
         telegram_token, chat_id = require_telegram_credentials(
-            TELEGRAM_BOT_TOKEN,
+            settings.telegram_bot_token,
             chat_id,
         )
         message = telegram_notify.format_run_summary(summary)
@@ -67,7 +68,7 @@ def send_telegram_summary(
 
 def print_summary(
     send_tg: bool = True,
-    chat_id: str | None = TELEGRAM_CHAT_ID,
+    chat_id: str | None = settings.telegram_chat_id,
 ):
     """Print comprehensive run summary."""
     print_header("RUN SUMMARY")
@@ -182,7 +183,7 @@ def validate_proxies() -> list[str]:
 
     print(f"Validating proxies from {PROXY_INPUT}...")
     result = subprocess.run([
-        PYTHON, "validate_proxies.py",
+        PYTHON, "-m", "ai_job_tracker.cli", "validate-proxies",
         PROXY_INPUT, PROXY_OUTPUT
     ], capture_output=True, text=True)
     print(result.stdout)
@@ -249,20 +250,8 @@ def _update_pass_summary(pass_key: str, scrape_ok: bool) -> None:
     bucket["found"] = count_total
     bucket["new"] = count_recent
 
-def main(argv: list[str] | None = None):
-    parser = argparse.ArgumentParser(description="Run the daily job-tracking pipeline")
-    parser.add_argument(
-        "--chat-id",
-        default=TELEGRAM_CHAT_ID,
-        help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
-    )
-    args = parser.parse_args(argv)
-
-    try:
-        _, chat_id = require_telegram_credentials(TELEGRAM_BOT_TOKEN, args.chat_id)
-    except ValueError as exc:
-        parser.error(str(exc))
-
+def run(chat_id: str):
+    """Run the daily pipeline against an already-validated Telegram chat id."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Job scraper + analyzer starting...")
     
     # Step 1: Re-validate proxies (fresh list each run)
@@ -283,7 +272,7 @@ def main(argv: list[str] | None = None):
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
     print("  -> Pass 1: Turkey-local jobs")
     scrape_ok_a = run_command([
-        PYTHON, "scraper.py",
+        PYTHON, "-m", "ai_job_tracker.cli", "scrape",
         "--query", "data scientist",
         "--country", "turkey",
         "--location", "Turkey",
@@ -296,7 +285,7 @@ def main(argv: list[str] | None = None):
 
     print("  -> Pass 2: Big Tech 7 (global, company-filtered)")
     scrape_ok_b = run_command([
-        PYTHON, "scraper.py",
+        PYTHON, "-m", "ai_job_tracker.cli", "scrape",
         "--query", "data scientist",
         "--country", "worldwide",
         "--big-tech",
@@ -311,7 +300,7 @@ def main(argv: list[str] | None = None):
     # LinkedIn, so a daily cron needs to look back further to catch anything new.
     print("  -> Pass 3: Big Tech career sites (direct, all 7)")
     scrape_ok_c = run_command([
-        PYTHON, "career_scraper.py",
+        PYTHON, "-m", "ai_job_tracker.cli", "career",
         "--query", "data scientist",
         "--hours", "168",                # 7 days — career sites update less often
         "--output", "jobs_linkedin.jsonl",
@@ -327,16 +316,21 @@ def main(argv: list[str] | None = None):
 
     # Step 3: Analyze
     print("\nStep 4: Analyzing new jobs...")
-    analysis_results_before = count_jsonl_lines("analysis_results.jsonl")
+    # Resolve the output path here and pass it explicitly, so the child's
+    # destination and this summary's accounting cannot drift apart when
+    # ANALYSIS_OUTPUT_FILE points somewhere other than the default.
+    analysis_output = settings.analysis_output_file
+    analysis_results_before = count_jsonl_lines(analysis_output)
     analyze_ok = run_command([
-        PYTHON, "analyzer.py",
+        PYTHON, "-m", "ai_job_tracker.cli", "analyze",
         "--jobs", "jobs_linkedin.jsonl",
+        "--output", analysis_output,
         "--hours", "1",
         "--skip-seen",
         "--chat-id", chat_id,
     ], "Analyzing jobs with Gemini")
 
-    new_analysis_results = read_jsonl_records("analysis_results.jsonl", analysis_results_before)
+    new_analysis_results = read_jsonl_records(analysis_output, analysis_results_before)
     analysis_summary = summarize_analysis_results(new_analysis_results, analyze_ok)
     run_summary["analyze"].update(analysis_summary)
 
@@ -349,5 +343,7 @@ def main(argv: list[str] | None = None):
     print_summary(chat_id=chat_id)
     print("\nDone!")
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()
