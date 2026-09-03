@@ -4,16 +4,7 @@ import asyncio
 import json
 import argparse
 from datetime import datetime, timedelta
-from ai_job_tracker.config import (
-    TELEGRAM_BOT_TOKEN,
-    BROWSER_PROFILE_PATH,
-    GEMINI_BROWSER_EXECUTABLE,
-    PROFILE_FILE,
-    JOBS_INPUT_FILE,
-    ANALYSIS_OUTPUT_FILE,
-    TELEGRAM_CHAT_ID,
-    require_telegram_credentials,
-)
+from ai_job_tracker.config import require_telegram_credentials, settings
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs
 from ai_job_tracker.telegram_notify import send_message, format_job_analysis, parse_gemini_response
@@ -81,7 +72,7 @@ async def analyze_job(
     browser_path: str,
     max_retries: int = 3,
     browser_executable: str | None = None,
-    telegram_token: str | None = TELEGRAM_BOT_TOKEN,
+    telegram_token: str | None = settings.telegram_bot_token,
 ) -> dict:
     """Analyze single job with Gemini and send to Telegram.
 
@@ -158,19 +149,19 @@ def save_result(result: dict, output_path: str):
 
 async def main():
     parser = argparse.ArgumentParser(description="Job analyzer with Gemini AI")
-    parser.add_argument("--profile", default=PROFILE_FILE, help="Profile file path")
-    parser.add_argument("--jobs", default=JOBS_INPUT_FILE, help="Jobs input file")
+    parser.add_argument("--profile", default=settings.profile_file, help="Profile file path")
+    parser.add_argument("--jobs", default=settings.jobs_input_file, help="Jobs input file")
     parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
-    parser.add_argument("--browser-path", default=BROWSER_PROFILE_PATH, help="Browser profile path")
+    parser.add_argument("--browser-path", default=settings.browser_profile_path, help="Browser profile path")
     parser.add_argument(
         "--browser-executable",
-        default=GEMINI_BROWSER_EXECUTABLE,
+        default=settings.gemini_browser_executable,
         help="Optional browser executable for Gemini; falls back to common browsers or bundled Chromium",
     )
-    parser.add_argument("--output", default=ANALYSIS_OUTPUT_FILE, help="Output file for results")
+    parser.add_argument("--output", default=settings.analysis_output_file, help="Output file for results")
     parser.add_argument(
         "--chat-id",
-        default=TELEGRAM_CHAT_ID,
+        default=settings.telegram_chat_id,
         help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
     )
     parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
@@ -180,7 +171,7 @@ async def main():
 
     try:
         telegram_token, chat_id = require_telegram_credentials(
-            TELEGRAM_BOT_TOKEN,
+            settings.telegram_bot_token,
             args.chat_id,
         )
     except ValueError as exc:

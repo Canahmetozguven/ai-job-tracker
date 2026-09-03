@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 from playwright.async_api import async_playwright, Error as PlaywrightError
 
-from ai_job_tracker.config import PROMPT_TEMPLATE
+from ai_job_tracker.config import PROMPT_TEMPLATE, settings
 
 
 COMMON_BROWSER_COMMANDS = [
@@ -88,7 +88,7 @@ async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: s
 
             try:
                 page = context.pages[0] if context.pages else await context.new_page()
-                await page.goto("https://gemini.google.com/app", wait_until="domcontentloaded")
+                await page.goto(settings.gemini_url, wait_until="domcontentloaded")
                 await page.wait_for_timeout(5000)
 
                 # Find input area and fill

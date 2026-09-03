@@ -58,7 +58,7 @@ uv run job-daily
 | `src/ai_job_tracker/run_daily.py` | Combines scraper + analyzer for scheduled runs |
 | `src/ai_job_tracker/telegram_notify.py` | Sends formatted alerts to Telegram |
 | `src/ai_job_tracker/gemini_client.py` | Browser automation for Gemini |
-| `src/ai_job_tracker/config.py` | Central configuration |
+| `src/ai_job_tracker/config.py` | Settings model (`pydantic-settings`) + Big Tech matching |
 | `src/ai_job_tracker/validate_proxies.py` | Tests proxies in parallel, saves working ones |
 | `profile.txt` | Your CV as plain text |
 
@@ -116,30 +116,37 @@ uv run pytest
 
 ### 2. Environment Variables
 
-Create `.env` file:
+Copy the example and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+At minimum, set:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your-bot-token-here
 TELEGRAM_CHAT_ID=your-chat-id-here
 ```
 
-Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
+Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram. See
+[Configuration](#configuration) for every supported key and its default.
 
 ### 3. Telegram Chat ID
 
 Message [@userinfobot](https://t.me/userinfobot) to get your chat ID.
 
 Set `TELEGRAM_CHAT_ID` in `.env` as shown above, or pass `--chat-id` to
-`src/ai_job_tracker/analyzer.py`. The application intentionally has no default destination.
+`job-analyze`. The application intentionally has no default destination.
 
 ### 4. Browser Profile (for Gemini)
 
 The analyzer uses Brave browser with an existing profile that's logged into Gemini.
 
 **Option A: Use existing Brave profile**
-```python
-# src/ai_job_tracker/config.py
-BROWSER_PROFILE_PATH = "path/to/your/Brave/User Data"
+```bash
+# .env
+BROWSER_PROFILE_PATH=path/to/your/Brave/User Data
 ```
 
 **Option B: Install Brave Nightly** (Linux)
@@ -375,7 +382,7 @@ After each `src/ai_job_tracker/run_daily.py` cycle, a summary report:
 - Bot must have permission to message your chat
 
 **Browser won't launch**
-- Install/verify Brave path in `src/ai_job_tracker/config.py`
+- Set `BROWSER_PROFILE_PATH` (and optionally `GEMINI_BROWSER_EXECUTABLE`) in `.env`
 - On Linux: `sudo apt install brave-browser`
 
 **Proxy validation fails**
@@ -394,7 +401,7 @@ After each `src/ai_job_tracker/run_daily.py` cycle, a summary report:
 ├── profile.txt           # Your CV
 ├── src/ai_job_tracker/
 │   ├── analyzer.py           # AI job analyzer (Gemini)
-│   ├── config.py             # Configuration
+│   ├── config.py             # Settings model (env / .env) + prompt template
 │   ├── gemini_client.py      # Browser automation for Gemini
 │   ├── job_loader.py         # JSONL loader
 │   ├── run_daily.py          # Scheduler (scraper + analyzer)
@@ -439,13 +446,26 @@ Logs are written to `cron.log` in the project directory.
 
 ## Configuration
 
-Key settings in `src/ai_job_tracker/config.py`:
+All settings come from the environment or a `.env` file — nothing is
+hard-coded per machine. `.env.example` documents the full surface; copy it and
+fill in what you need. Every key is optional except the Telegram credentials,
+and a blank value is treated as unset, so the default applies.
 
-| Setting | Description |
-|---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
-| `TELEGRAM_CHAT_ID` | Destination chat or channel ID |
-| `BROWSER_PROFILE_PATH` | Path to Brave browser profile |
-| `PROFILE_FILE` | Path to your CV text file |
-| `JOBS_INPUT_FILE` | Default jobs file |
-| `ANALYSIS_OUTPUT_FILE` | Analysis results file |
+| Env var | Description | Default |
+|---------|-------------|---------|
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token | *(required to notify)* |
+| `TELEGRAM_CHAT_ID` | Destination chat or channel ID | *(required to notify)* |
+| `BROWSER_PROFILE_PATH` | Brave/Chrome profile with an authenticated Gemini session | `USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data` |
+| `GEMINI_BROWSER_EXECUTABLE` | Browser executable or command for Gemini | *(Playwright's bundled Chromium)* |
+| `GEMINI_URL` | Gemini web app URL | `https://gemini.google.com/app` |
+| `PROFILE_FILE` | Path to your CV text file | `profile.txt` |
+| `JOBS_INPUT_FILE` | Default jobs file | `jobs.jsonl` |
+| `ANALYSIS_OUTPUT_FILE` | Analysis results file | `analysis_results.jsonl` |
+
+Precedence is process environment > `.env` > default. The settings model lives
+in `src/ai_job_tracker/config.py` as a `pydantic-settings` `Settings` class;
+field names map to the upper-case keys above.
+
+The Gemini prompt template is deliberately *not* a setting — it is a 60-line
+template with your profile embedded, which does not fit in a `.env` value. It
+stays a constant in `config.py`.

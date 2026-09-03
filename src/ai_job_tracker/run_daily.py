@@ -11,7 +11,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from ai_job_tracker.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, require_telegram_credentials
+from ai_job_tracker.config import require_telegram_credentials, settings
 from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
 from ai_job_tracker import telegram_notify
 import telegram
@@ -48,12 +48,12 @@ def print_header(title: str):
 
 def send_telegram_summary(
     summary: dict,
-    chat_id: str | None = TELEGRAM_CHAT_ID,
+    chat_id: str | None = settings.telegram_chat_id,
 ):
     """Send run summary to Telegram."""
     try:
         telegram_token, chat_id = require_telegram_credentials(
-            TELEGRAM_BOT_TOKEN,
+            settings.telegram_bot_token,
             chat_id,
         )
         message = telegram_notify.format_run_summary(summary)
@@ -69,7 +69,7 @@ def send_telegram_summary(
 
 def print_summary(
     send_tg: bool = True,
-    chat_id: str | None = TELEGRAM_CHAT_ID,
+    chat_id: str | None = settings.telegram_chat_id,
 ):
     """Print comprehensive run summary."""
     print_header("RUN SUMMARY")
@@ -255,13 +255,13 @@ def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Run the daily job-tracking pipeline")
     parser.add_argument(
         "--chat-id",
-        default=TELEGRAM_CHAT_ID,
+        default=settings.telegram_chat_id,
         help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
     )
     args = parser.parse_args(argv)
 
     try:
-        _, chat_id = require_telegram_credentials(TELEGRAM_BOT_TOKEN, args.chat_id)
+        _, chat_id = require_telegram_credentials(settings.telegram_bot_token, args.chat_id)
     except ValueError as exc:
         parser.error(str(exc))
 
