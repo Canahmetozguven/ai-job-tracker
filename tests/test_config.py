@@ -2,7 +2,7 @@
 
 import pytest
 
-from config import BIG_TECH_COMPANIES, match_big_tech, require_telegram_credentials
+from ai_job_tracker.config import BIG_TECH_COMPANIES, match_big_tech, require_telegram_credentials
 
 
 def test_require_telegram_credentials_returns_stripped_values():

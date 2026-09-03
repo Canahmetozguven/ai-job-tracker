@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 from playwright.async_api import async_playwright, Error as PlaywrightError
 
-from config import PROMPT_TEMPLATE
+from ai_job_tracker.config import PROMPT_TEMPLATE
 
 
 COMMON_BROWSER_COMMANDS = [

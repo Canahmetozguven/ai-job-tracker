@@ -4,7 +4,7 @@ import asyncio
 import json
 import argparse
 from datetime import datetime, timedelta
-from config import (
+from ai_job_tracker.config import (
     TELEGRAM_BOT_TOKEN,
     BROWSER_PROFILE_PATH,
     GEMINI_BROWSER_EXECUTABLE,
@@ -14,11 +14,11 @@ from config import (
     TELEGRAM_CHAT_ID,
     require_telegram_credentials,
 )
-from user_profile import load_profile
-from job_loader import load_jobs
-from telegram_notify import send_message, format_job_analysis, parse_gemini_response
-from gemini_client import submit_to_gemini, build_prompt
-from analysis_validation import is_valid_analysis
+from ai_job_tracker.user_profile import load_profile
+from ai_job_tracker.job_loader import load_jobs
+from ai_job_tracker.telegram_notify import send_message, format_job_analysis, parse_gemini_response
+from ai_job_tracker.gemini_client import submit_to_gemini, build_prompt
+from ai_job_tracker.analysis_validation import is_valid_analysis
 
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds
@@ -245,5 +245,9 @@ async def main():
     print(f"Complete: {success_count} succeeded, {error_count} failed")
     print(f"Results saved to {args.output}")
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console-script entry point for the async main()."""
     asyncio.run(main())
+
+if __name__ == "__main__":
+    run()

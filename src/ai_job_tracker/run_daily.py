@@ -11,14 +11,16 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, require_telegram_credentials
-from analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
-import telegram_notify
+from ai_job_tracker.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, require_telegram_credentials
+from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
+from ai_job_tracker import telegram_notify
 import telegram
-import proxy_scraper
+from ai_job_tracker import proxy_scraper
 
-# Use the venv Python explicitly — sys.executable may resolve to system Python in cron
-PYTHON = "/home/can/Desktop/job/.venv/bin/python"
+# Child steps run as `-m` modules under the *same* interpreter running this
+# process. Launched via the `job-daily` console script, sys.executable is the
+# venv Python, so cron needs no absolute path baked in.
+PYTHON = sys.executable
 
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds between retries
@@ -182,7 +184,7 @@ def validate_proxies() -> list[str]:
 
     print(f"Validating proxies from {PROXY_INPUT}...")
     result = subprocess.run([
-        PYTHON, "validate_proxies.py",
+        PYTHON, "-m", "ai_job_tracker.validate_proxies",
         PROXY_INPUT, PROXY_OUTPUT
     ], capture_output=True, text=True)
     print(result.stdout)
@@ -283,7 +285,7 @@ def main(argv: list[str] | None = None):
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
     print("  -> Pass 1: Turkey-local jobs")
     scrape_ok_a = run_command([
-        PYTHON, "scraper.py",
+        PYTHON, "-m", "ai_job_tracker.scraper",
         "--query", "data scientist",
         "--country", "turkey",
         "--location", "Turkey",
@@ -296,7 +298,7 @@ def main(argv: list[str] | None = None):
 
     print("  -> Pass 2: Big Tech 7 (global, company-filtered)")
     scrape_ok_b = run_command([
-        PYTHON, "scraper.py",
+        PYTHON, "-m", "ai_job_tracker.scraper",
         "--query", "data scientist",
         "--country", "worldwide",
         "--big-tech",
@@ -311,7 +313,7 @@ def main(argv: list[str] | None = None):
     # LinkedIn, so a daily cron needs to look back further to catch anything new.
     print("  -> Pass 3: Big Tech career sites (direct, all 7)")
     scrape_ok_c = run_command([
-        PYTHON, "career_scraper.py",
+        PYTHON, "-m", "ai_job_tracker.career_scraper",
         "--query", "data scientist",
         "--hours", "168",                # 7 days — career sites update less often
         "--output", "jobs_linkedin.jsonl",
@@ -329,7 +331,7 @@ def main(argv: list[str] | None = None):
     print("\nStep 4: Analyzing new jobs...")
     analysis_results_before = count_jsonl_lines("analysis_results.jsonl")
     analyze_ok = run_command([
-        PYTHON, "analyzer.py",
+        PYTHON, "-m", "ai_job_tracker.analyzer",
         "--jobs", "jobs_linkedin.jsonl",
         "--hours", "1",
         "--skip-seen",

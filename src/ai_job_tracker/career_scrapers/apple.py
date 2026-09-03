@@ -7,7 +7,7 @@ would need HTML scraping to extract jobs — out of scope for this plan
 (needs Playwright/headless browser).
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class AppleScraper(BaseCareerScraper):

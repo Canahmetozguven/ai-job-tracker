@@ -17,7 +17,7 @@ class FakeResponse:
 
 
 def load_module():
-    import proxy_scraper
+    from ai_job_tracker import proxy_scraper
 
     return proxy_scraper
 

@@ -24,13 +24,13 @@ cp .env.example .env  # Add your Telegram bot token and chat ID
 echo "Your CV text here..." > profile.txt
 
 # 5. Scrape jobs
-uv run python scraper.py --query "data scientist" --location "Turkey" --hours 1
+uv run job-scrape --query "data scientist" --location "Turkey" --hours 1
 
 # 6. Analyze with AI
-uv run python analyzer.py --jobs jobs.jsonl --hours 1
+uv run job-analyze --jobs jobs.jsonl --hours 1
 
 # 7. Or run everything automatically (cron/scheduler)
-uv run python run_daily.py
+uv run job-daily
 ```
 
 ---
@@ -53,13 +53,13 @@ uv run python run_daily.py
 
 | File | Purpose |
 |------|---------|
-| `scraper.py` | Scrapes jobs from JobSpy/LinkedIn, outputs JSONL |
-| `analyzer.py` | Uses Gemini AI to evaluate job fit |
-| `run_daily.py` | Combines scraper + analyzer for scheduled runs |
-| `telegram_notify.py` | Sends formatted alerts to Telegram |
-| `gemini_client.py` | Browser automation for Gemini |
-| `config.py` | Central configuration |
-| `validate_proxies.py` | Tests proxies in parallel, saves working ones |
+| `src/ai_job_tracker/scraper.py` | Scrapes jobs from JobSpy/LinkedIn, outputs JSONL |
+| `src/ai_job_tracker/analyzer.py` | Uses Gemini AI to evaluate job fit |
+| `src/ai_job_tracker/run_daily.py` | Combines scraper + analyzer for scheduled runs |
+| `src/ai_job_tracker/telegram_notify.py` | Sends formatted alerts to Telegram |
+| `src/ai_job_tracker/gemini_client.py` | Browser automation for Gemini |
+| `src/ai_job_tracker/config.py` | Central configuration |
+| `src/ai_job_tracker/validate_proxies.py` | Tests proxies in parallel, saves working ones |
 | `profile.txt` | Your CV as plain text |
 
 ---
@@ -130,7 +130,7 @@ Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
 Message [@userinfobot](https://t.me/userinfobot) to get your chat ID.
 
 Set `TELEGRAM_CHAT_ID` in `.env` as shown above, or pass `--chat-id` to
-`analyzer.py`. The application intentionally has no default destination.
+`src/ai_job_tracker/analyzer.py`. The application intentionally has no default destination.
 
 ### 4. Browser Profile (for Gemini)
 
@@ -138,7 +138,7 @@ The analyzer uses Brave browser with an existing profile that's logged into Gemi
 
 **Option A: Use existing Brave profile**
 ```python
-# config.py
+# src/ai_job_tracker/config.py
 BROWSER_PROFILE_PATH = "path/to/your/Brave/User Data"
 ```
 
@@ -154,7 +154,7 @@ Edit `profile.txt` with your CV as plain text. This is included in every Gemini 
 
 ### 6. Proxy List
 
-Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line). The `run_daily.py` script automatically validates proxies and selects a working one for each scraping cycle.
+Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line). The `src/ai_job_tracker/run_daily.py` script automatically validates proxies and selects a working one for each scraping cycle.
 
 ---
 
@@ -164,22 +164,22 @@ Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line
 
 ```bash
 # Interactive mode (prompts for input)
-uv run python scraper.py
+uv run job-scrape
 
 # Command-line mode
-uv run python scraper.py --query "data scientist" --location "Turkey" --limit 20
+uv run job-scrape --query "data scientist" --location "Turkey" --limit 20
 
 # Scrape only recent jobs (last 3 hours)
-uv run python scraper.py --query "data scientist" --location "Turkey" --hours 3
+uv run job-scrape --query "data scientist" --location "Turkey" --hours 3
 
 # Daemon mode (continuous scraping)
-uv run python scraper.py --query "data scientist" --location "Turkey" --daemon --interval 30
+uv run job-scrape --query "data scientist" --location "Turkey" --daemon --interval 30
 
 # Multiple sources with fallback
-uv run python scraper.py --source 3  # JobSpy → LinkedIn fallback
+uv run job-scrape --source 3  # JobSpy → LinkedIn fallback
 
 # Big Tech 7 pass (global, company-filtered)
-uv run python scraper.py --query "data scientist" --country worldwide --big-tech --hours 1
+uv run job-scrape --query "data scientist" --country worldwide --big-tech --hours 1
 ```
 
 | Option | Default | Description |
@@ -200,16 +200,16 @@ uv run python scraper.py --query "data scientist" --country worldwide --big-tech
 
 ```bash
 # Analyze all jobs in file
-uv run python analyzer.py --jobs jobs.jsonl
+uv run job-analyze --jobs jobs.jsonl
 
 # Analyze only recent jobs (last 3 hours)
-uv run python analyzer.py --jobs jobs.jsonl --hours 3
+uv run job-analyze --jobs jobs.jsonl --hours 3
 
 # Skip already-analyzed jobs
-uv run python analyzer.py --jobs jobs.jsonl --skip-seen
+uv run job-analyze --jobs jobs.jsonl --skip-seen
 
 # Limit to 5 jobs
-uv run python analyzer.py --jobs jobs.jsonl --limit 5
+uv run job-analyze --jobs jobs.jsonl --limit 5
 ```
 
 | Option | Default | Description |
@@ -228,13 +228,13 @@ Combines scraper + analyzer in sequence with proxy validation and retry support:
 
 ```bash
 # Single run
-uv run python run_daily.py
+uv run job-daily
 
 # Override the destination for this run
-uv run python run_daily.py --chat-id "your-chat-id"
+uv run job-daily --chat-id "your-chat-id"
 
 # For cron (runs every 30 minutes)
-*/30 * * * * cd /home/can/Desktop/job && /home/can/Desktop/job/.venv/bin/python run_daily.py >> cron.log 2>&1
+*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job-daily >> cron.log 2>&1
 ```
 
 The daily runner:
@@ -250,22 +250,22 @@ Standalone tool to fetch fresh proxies from online sources:
 
 ```bash
 # Scrape all sources
-python proxy_scraper.py
+uv run job-proxies
 
 # Scrape specific source only
-python proxy_scraper.py --source 1   # ProxyScrape
-python proxy_scraper.py --source 2   # Free Proxy List
-python proxy_scraper.py --source 3   # GeoNode
+uv run job-proxies --source 1   # ProxyScrape
+uv run job-proxies --source 2   # Free Proxy List
+uv run job-proxies --source 3   # GeoNode
 ```
 
-Proxies are appended to `proxies/proxyscrape_raw.txt`. `run_daily.py` automatically calls this before validation.
+Proxies are appended to `proxies/proxyscrape_raw.txt`. `src/ai_job_tracker/run_daily.py` automatically calls this before validation.
 
 ### Proxy Validator
 
 Standalone tool to test and filter proxies:
 
 ```bash
-python validate_proxies.py proxies/proxyscrape_raw.txt proxies/working.txt
+uv run job-validate-proxies proxies/proxyscrape_raw.txt proxies/working.txt
 ```
 
 | Option | Default | Description |
@@ -335,7 +335,7 @@ Individual job analysis results sent as jobs are analyzed:
 ```
 
 ### Run Summary
-After each `run_daily.py` cycle, a summary report:
+After each `src/ai_job_tracker/run_daily.py` cycle, a summary report:
 ```
 📊 Daily Job Scraper - Run Summary
 
@@ -367,7 +367,7 @@ After each `run_daily.py` cycle, a summary report:
 **Analyzer "No response received"**
 - Verify Gemini is accessible: https://gemini.google.com/app
 - Check browser profile is logged in
-- Try increasing wait time in `gemini_client.py`
+- Try increasing wait time in `src/ai_job_tracker/gemini_client.py`
 
 **Telegram not sending**
 - Verify bot token is correct in `.env`
@@ -375,7 +375,7 @@ After each `run_daily.py` cycle, a summary report:
 - Bot must have permission to message your chat
 
 **Browser won't launch**
-- Install/verify Brave path in `config.py`
+- Install/verify Brave path in `src/ai_job_tracker/config.py`
 - On Linux: `sudo apt install brave-browser`
 
 **Proxy validation fails**
@@ -389,28 +389,33 @@ After each `run_daily.py` cycle, a summary report:
 
 ```
 .
-├── analyzer.py           # AI job analyzer (Gemini)
-├── config.py             # Configuration
-├── gemini_client.py      # Browser automation for Gemini
-├── job_loader.py         # JSONL loader
-├── profile.txt           # Your CV
-├── pyproject.toml        # Project metadata and dependencies
+├── pyproject.toml        # Project metadata, dependencies, console scripts
 ├── uv.lock               # Reproducible dependency lockfile
-├── run_daily.py          # Scheduler (scraper + analyzer)
-├── scraper.py            # Job scraper
-├── telegram_notify.py    # Telegram notifications
-├── proxy_scraper.py      # Auto-fetch proxies from online sources
-├── user_profile.py       # CV loader
-├── validate_proxies.py   # Proxy validator
+├── profile.txt           # Your CV
+├── src/ai_job_tracker/
+│   ├── analyzer.py           # AI job analyzer (Gemini)
+│   ├── config.py             # Configuration
+│   ├── gemini_client.py      # Browser automation for Gemini
+│   ├── job_loader.py         # JSONL loader
+│   ├── run_daily.py          # Scheduler (scraper + analyzer)
+│   ├── scraper.py            # Job scraper (JobSpy/LinkedIn)
+│   ├── career_scraper.py     # Big Tech career-site scraper CLI
+│   ├── telegram_notify.py    # Telegram notifications
+│   ├── proxy_scraper.py      # Auto-fetch proxies from online sources
+│   ├── user_profile.py       # CV loader
+│   ├── validate_proxies.py   # Proxy validator
+│   └── career_scrapers/      # Per-company scrapers (add one file to extend)
+│       ├── base.py           # BaseCareerScraper
+│       └── amazon.py, google.py, meta.py, microsoft.py, apple.py, ...
+├── scripts/
+│   └── check_secrets.py  # Repo credential scanner (pre-commit + CI)
+├── tests/
 ├── jobs.jsonl            # Scraped jobs (generated)
-├── analysis_results.jsonl # Analysis output
+├── analysis_results.jsonl # Analysis output (generated)
 ├── cron.log              # Run logs (generated)
 ├── proxies/
 │   ├── proxyscrape_raw.txt # Raw proxy list (provide your own)
 │   └── working.txt         # Validated working proxies
-├── tests/
-│   ├── test_analyzer.py
-│   └── test_scraper.py
 └── docs/                 # Specs and plans
 ```
 
@@ -425,7 +430,7 @@ For automatic hourly scraping + analysis:
 crontab -e
 
 # Add this line (runs every 30 minutes)
-*/30 * * * * cd /home/can/Desktop/job && /home/can/Desktop/job/.venv/bin/python run_daily.py >> cron.log 2>&1
+*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job-daily >> cron.log 2>&1
 ```
 
 Logs are written to `cron.log` in the project directory.
@@ -434,7 +439,7 @@ Logs are written to `cron.log` in the project directory.
 
 ## Configuration
 
-Key settings in `config.py`:
+Key settings in `src/ai_job_tracker/config.py`:
 
 | Setting | Description |
 |---------|-------------|

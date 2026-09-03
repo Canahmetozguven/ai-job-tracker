@@ -6,8 +6,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-import career_scraper as cs
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker import career_scraper as cs
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class AmazonScraperMock(BaseCareerScraper):

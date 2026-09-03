@@ -15,8 +15,8 @@ import argparse
 import os
 import sys
 
-from career_scrapers import SCRAPERS, BaseCareerScraper
-from scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
+from ai_job_tracker.career_scrapers import SCRAPERS, BaseCareerScraper
+from ai_job_tracker.scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
 
 
 def _build_argparser() -> argparse.ArgumentParser:

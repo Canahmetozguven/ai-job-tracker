@@ -5,7 +5,7 @@ requires-python = "==3.12.*"
 [[package]]
 name = "ai-job-tracker"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "linkedin-scraper" },
     { name = "playwright" },

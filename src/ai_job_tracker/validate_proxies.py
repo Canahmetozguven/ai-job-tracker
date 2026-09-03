@@ -41,7 +41,7 @@ def save_proxies(proxies: List[str], path: str):
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python validate_proxies.py <input_file> <output_file>")
+        print("Usage: job-validate-proxies <input_file> <output_file>")
         sys.exit(1)
 
     input_file = sys.argv[1]

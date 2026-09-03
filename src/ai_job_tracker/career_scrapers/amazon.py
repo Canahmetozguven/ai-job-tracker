@@ -18,7 +18,7 @@ a usable record and would otherwise pollute the JSONL with homepage URLs.
 import json
 from urllib.parse import urlencode
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class AmazonScraper(BaseCareerScraper):

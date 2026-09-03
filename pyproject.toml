@@ -12,6 +12,14 @@ dependencies = [
     "python-telegram-bot>=22.0",
 ]
 
+[project.scripts]
+job-scrape = "ai_job_tracker.scraper:main"
+job-analyze = "ai_job_tracker.analyzer:run"
+job-daily = "ai_job_tracker.run_daily:main"
+job-career = "ai_job_tracker.career_scraper:main"
+job-proxies = "ai_job_tracker.proxy_scraper:main"
+job-validate-proxies = "ai_job_tracker.validate_proxies:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
@@ -21,5 +29,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

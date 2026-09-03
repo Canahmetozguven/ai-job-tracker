@@ -5,7 +5,7 @@ careers page is server-rendered; HTML scraping would need a headless
 browser (Playwright), out of scope for this plan.
 """
 
-from career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
 class TeslaScraper(BaseCareerScraper):

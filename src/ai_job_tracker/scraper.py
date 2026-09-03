@@ -9,7 +9,7 @@ import os
 import random
 import sys
 import time
-from config import match_big_tech
+from ai_job_tracker.config import match_big_tech
 from datetime import datetime
 from typing import Optional
 
