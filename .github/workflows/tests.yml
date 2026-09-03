@@ -19,6 +19,10 @@ jobs:
         run: uv python install
       - name: Install dependencies
         run: uv sync --locked --dev
+      - name: Smoke-check CLI entry points
+        run: |
+          uv run python scraper.py --help
+          uv run python analyzer.py --help
       - name: Install Playwright Chromium
         run: uv run playwright install --with-deps chromium
       - name: Run tests

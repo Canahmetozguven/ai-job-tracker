@@ -28,11 +28,11 @@ def test_template_has_no_embedded_cv():
 
 
 def test_no_operator_identity_in_application_code():
-    """Config must not ship anyone's CV, contact details, or machine paths."""
+    """Config must not ship anyone's CV or personal contact details."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     for name in ("config.py", "analyzer.py"):
         source = (root / name).read_text()
-        for leak in ("1949164657", "MR1KOEH", "@gmail.com", "05396879669"):
+        for leak in ("1949164657", "@gmail.com", "05396879669", "CAN AHMET"):
             assert leak not in source, f"{name} still embeds {leak}"

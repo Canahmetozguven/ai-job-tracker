@@ -120,17 +120,17 @@ Create `.env` file:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your-bot-token-here
-TELEGRAM_CHAT_ID=your-chat-id
-BROWSER_PROFILE_PATH=path/to/your/Brave/User Data
+TELEGRAM_CHAT_ID=your-chat-id-here
 ```
 
 Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
 
 ### 3. Telegram Chat ID
 
-Message [@userinfobot](https://t.me/userinfobot) to get your chat ID, then set
-`TELEGRAM_CHAT_ID` in `.env` (or pass `--chat-id`). The analyzer refuses to run
-without one.
+Message [@userinfobot](https://t.me/userinfobot) to get your chat ID.
+
+Set `TELEGRAM_CHAT_ID` in `.env` as shown above, or pass `--chat-id` to
+`analyzer.py`. The application intentionally has no default destination.
 
 ### 4. Browser Profile (for Gemini)
 
@@ -220,7 +220,7 @@ uv run python analyzer.py --jobs jobs.jsonl --limit 5
 | `--limit` | `0` (all) | Max jobs to process |
 | `--hours` | `0` | Only analyze jobs from last N hours |
 | `--skip-seen` | false | Skip already-analyzed jobs |
-| `--chat-id` | from config | Telegram chat ID |
+| `--chat-id` | `TELEGRAM_CHAT_ID` | Telegram chat ID (required) |
 | `--retries` | `3` | Max retries per job on Gemini failure |
 
 ### Daily Runner
@@ -230,6 +230,9 @@ Combines scraper + analyzer in sequence with proxy validation and retry support:
 ```bash
 # Single run
 uv run python run_daily.py
+
+# Override the destination for this run
+uv run python run_daily.py --chat-id "your-chat-id"
 
 # For cron (runs every 30 minutes)
 */30 * * * * cd /home/can/Desktop/job && /home/can/Desktop/job/.venv/bin/python run_daily.py >> cron.log 2>&1
@@ -436,9 +439,9 @@ Key settings in `config.py`:
 
 | Setting | Description |
 |---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token (env) |
-| `DEFAULT_CHAT_ID` | Telegram chat ID, from `TELEGRAM_CHAT_ID` (env) |
-| `BROWSER_PROFILE_PATH` | Browser profile dir, from `BROWSER_PROFILE_PATH` (env) |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Destination chat or channel ID |
+| `BROWSER_PROFILE_PATH` | Path to Brave browser profile |
 | `PROFILE_FILE` | Path to your CV text file |
 | `JOBS_INPUT_FILE` | Default jobs file |
 | `ANALYSIS_OUTPUT_FILE` | Analysis results file |

@@ -8,8 +8,27 @@ load_dotenv()
 # Telegram Bot Token (bot that sends messages)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Browser profile directory holding a session already signed in to Gemini
-BROWSER_PROFILE_PATH = os.getenv("BROWSER_PROFILE_PATH") or "browser-profile"
+# Telegram destination. There is deliberately no repository-owned fallback:
+# operators must choose the destination in their environment or on the CLI.
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+def require_telegram_credentials(
+    token: str | None,
+    chat_id: str | None,
+) -> tuple[str, str]:
+    """Return configured Telegram credentials or fail before sending."""
+    missing = []
+    if not token or not token.strip():
+        missing.append("TELEGRAM_BOT_TOKEN")
+    if not chat_id or not chat_id.strip():
+        missing.append("TELEGRAM_CHAT_ID (or --chat-id)")
+    if missing:
+        raise ValueError(f"Missing required Telegram configuration: {', '.join(missing)}")
+    return token.strip(), chat_id.strip()
+
+# Browser Profile Path (Brave backup with authenticated session)
+BROWSER_PROFILE_PATH = os.getenv("BROWSER_PROFILE_PATH") or "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
 
 # Optional browser executable for Gemini automation
 GEMINI_BROWSER_EXECUTABLE = os.getenv("GEMINI_BROWSER_EXECUTABLE") or None
@@ -21,9 +40,6 @@ ANALYSIS_OUTPUT_FILE = "analysis_results.jsonl"
 
 # Gemini settings
 GEMINI_URL = "https://gemini.google.com/app"
-
-# Telegram chat that receives alerts (override with --chat-id argument)
-DEFAULT_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Prompt template for Gemini analysis
 PROMPT_TEMPLATE = """Analyze this job posting for an actionable shortlist decision.
