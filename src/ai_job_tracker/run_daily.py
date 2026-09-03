@@ -316,16 +316,21 @@ def run(chat_id: str):
 
     # Step 3: Analyze
     print("\nStep 4: Analyzing new jobs...")
-    analysis_results_before = count_jsonl_lines("analysis_results.jsonl")
+    # Resolve the output path here and pass it explicitly, so the child's
+    # destination and this summary's accounting cannot drift apart when
+    # ANALYSIS_OUTPUT_FILE points somewhere other than the default.
+    analysis_output = settings.analysis_output_file
+    analysis_results_before = count_jsonl_lines(analysis_output)
     analyze_ok = run_command([
         PYTHON, "-m", "ai_job_tracker.cli", "analyze",
         "--jobs", "jobs_linkedin.jsonl",
+        "--output", analysis_output,
         "--hours", "1",
         "--skip-seen",
         "--chat-id", chat_id,
     ], "Analyzing jobs with Gemini")
 
-    new_analysis_results = read_jsonl_records("analysis_results.jsonl", analysis_results_before)
+    new_analysis_results = read_jsonl_records(analysis_output, analysis_results_before)
     analysis_summary = summarize_analysis_results(new_analysis_results, analyze_ok)
     run_summary["analyze"].update(analysis_summary)
 

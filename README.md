@@ -185,8 +185,8 @@ Shell completion is available via `job --install-completion`.
 ### Scraper
 
 ```bash
-# Interactive mode (prompts for input)
-uv run job scrape
+# Interactive mode (prompts for every option)
+uv run job scrape --interactive
 
 # Command-line mode
 uv run job scrape --query "data scientist" --location "Turkey" --limit 20
@@ -204,10 +204,15 @@ uv run job scrape --source 3  # JobSpy → LinkedIn fallback
 uv run job scrape --query "data scientist" --country worldwide --big-tech --hours 1
 ```
 
+`--interactive` prompts for every option. Without it, `job scrape` prompts only
+for `--query` and `--location` if they are missing (and skips the location
+prompt under `--big-tech`, which searches globally); everything else falls back
+to its documented default.
+
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--query`, `-q` | (required) | Job search query |
-| `--location`, `-l` | (required) | Location (city, country) |
+| `--query`, `-q` | (prompted if omitted) | Job search query |
+| `--location`, `-l` | (prompted if omitted) | Location (city, country); skipped under `--big-tech` |
 | `--country` | `turkey` | Country for JobSpy's `country_indeed` (e.g. `turkey`, `worldwide`, `usa`, `uk`) |
 | `--big-tech` | off | Post-filter results to Big Tech 7 (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla). Forces a global search; ignores `--location`. |
 | `--source`, `-s` | `1` | 1=JobSpy, 2=LinkedIn, 3=Both with fallback |
@@ -217,6 +222,9 @@ uv run job scrape --query "data scientist" --country worldwide --big-tech --hour
 | `--daemon`, `-d` | false | Run continuously |
 | `--interval`, `-i` | `30` | Minutes between scrapes (daemon mode) |
 | `--proxy` | random from pool | Specific proxy to use |
+| `--no-proxy` | off | Disable proxy rotation |
+| `--append`, `-a` | off | Append to the output file instead of overwriting |
+| `--interactive`, `-I` | off | Prompt for every option instead of reading flags |
 
 ### Analyzer
 

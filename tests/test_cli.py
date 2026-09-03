@@ -8,7 +8,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from ai_job_tracker import proxy_scraper, scraper, validate_proxies
+from ai_job_tracker import proxy_scraper, run_daily, scraper, validate_proxies
 from ai_job_tracker.cli import app
 
 from conftest import CLI_ENV, plain
@@ -151,3 +151,33 @@ def test_entry_point_is_wired_to_the_typer_app():
     module_name, _, attr = scripts["job"].partition(":")
     target = getattr(import_module(module_name), attr)
     assert isinstance(target, typer.Typer)
+
+
+def test_daily_threads_configured_analysis_output_through_accounting(monkeypatch):
+    """The child's --output and the summary's accounting must be the same path.
+
+    ANALYSIS_OUTPUT_FILE became configurable in the settings commit, but the
+    daily pipeline still counted the literal analysis_results.jsonl. With a
+    custom path the summary saw no new records and could report success while
+    the configured file held processed jobs or failures.
+    """
+    monkeypatch.setattr(run_daily.settings, "analysis_output_file", "custom_results.jsonl")
+
+    argvs = []
+    counted, read = [], []
+
+    monkeypatch.setattr(run_daily, "validate_proxies", lambda: ["1.2.3.4:8080"])
+    monkeypatch.setattr(run_daily, "print_summary", lambda **_: None)
+    monkeypatch.setattr(run_daily, "_update_pass_summary", lambda *a, **k: None)
+    monkeypatch.setattr(run_daily, "run_command", lambda cmd, desc, **k: argvs.append(cmd) or True)
+    monkeypatch.setattr(run_daily, "count_jsonl_lines", lambda p: counted.append(p) or 0)
+    monkeypatch.setattr(run_daily, "read_jsonl_records", lambda p, n: read.append(p) or [])
+    monkeypatch.setattr(run_daily, "summarize_analysis_results", lambda records, ok: {})
+
+    run_daily.run("chat-123")
+
+    analyze_argv = next(a for a in argvs if "analyze" in a)
+    assert "--output" in analyze_argv
+    assert analyze_argv[analyze_argv.index("--output") + 1] == "custom_results.jsonl"
+    assert counted == ["custom_results.jsonl"]
+    assert read == ["custom_results.jsonl"]
