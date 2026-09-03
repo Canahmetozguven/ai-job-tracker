@@ -18,7 +18,9 @@ CREDENTIAL_ASSIGNMENT = re.compile(
     r"(?:api[_-]?key|access[_-]?token|bot[_-]?token|password|secret)"
     r"(?:[_-][A-Za-z0-9]+)*"
     r"(?![A-Za-z0-9_])"
-    r"\s*[:=]\s*[\"']?([A-Za-z0-9_./+=-]{20,})"
+    r"[\"']?\s*[:=]\s*"
+    # Quoted values may hold any punctuation; bare values stay token-shaped.
+    r"(?:[\"']([^\"'\n]{20,})[\"']|([A-Za-z0-9_./+=-]{20,}))"
 )
 PLACEHOLDERS = ("example", "placeholder", "redacted", "your-")
 
@@ -31,7 +33,7 @@ def find_secrets(text: str) -> list[str]:
     if PRIVATE_KEY.search(text):
         findings.append("private key")
     for match in CREDENTIAL_ASSIGNMENT.finditer(text):
-        candidate = match.group(1).lower()
+        candidate = (match.group(1) or match.group(2)).lower()
         if not any(marker in candidate for marker in PLACEHOLDERS):
             findings.append("credential assignment")
             break

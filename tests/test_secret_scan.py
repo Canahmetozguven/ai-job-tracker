@@ -27,3 +27,16 @@ def test_secret_scan_detects_encrypted_pkcs8_private_key():
     header = "-----BEGIN " + "ENCRYPTED PRIVATE KEY-----"
 
     assert "private key" in find_secrets(header)
+
+
+def test_secret_scan_detects_quoted_json_credential_key():
+    assignment = '"OPENAI_API_KEY": "sk-proj-' + "A" * 32 + '"'
+
+    assert "credential assignment" in find_secrets(assignment)
+
+
+def test_secret_scan_detects_password_with_punctuation():
+    password = "P@ssw0rd-with" + "-many-chars-123"
+    assignment = f'SERVICE_PASSWORD="{password}"'
+
+    assert "credential assignment" in find_secrets(assignment)
