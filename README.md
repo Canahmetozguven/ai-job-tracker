@@ -21,7 +21,7 @@ uv run playwright install chromium
 cp .env.example .env  # Add your Telegram bot token
 
 # 4. Add your CV
-echo "Your CV text here..." > profile.txt
+cp profile.example.txt profile.txt  # then edit it with your own CV
 
 # 5. Scrape jobs
 uv run python scraper.py --query "data scientist" --location "Turkey" --hours 1
@@ -60,7 +60,7 @@ uv run python run_daily.py
 | `gemini_client.py` | Browser automation for Gemini |
 | `config.py` | Central configuration |
 | `validate_proxies.py` | Tests proxies in parallel, saves working ones |
-| `profile.txt` | Your CV as plain text |
+| `profile.example.txt` | Template CV — copy to `profile.txt` (gitignored) |
 
 ---
 
@@ -151,7 +151,8 @@ BROWSER_PROFILE_PATH = "path/to/your/Brave/User Data"
 
 ### 5. Your CV
 
-Edit `profile.txt` with your CV as plain text. This is included in every Gemini prompt.
+Copy `profile.example.txt` to `profile.txt` and replace it with your CV as plain text. The
+file is gitignored, and its contents are inserted into every Gemini prompt.
 
 ### 6. Proxy List
 
@@ -391,7 +392,7 @@ After each `run_daily.py` cycle, a summary report:
 ├── config.py             # Configuration
 ├── gemini_client.py      # Browser automation for Gemini
 ├── job_loader.py         # JSONL loader
-├── profile.txt           # Your CV
+├── profile.example.txt   # CV template (copy to profile.txt)
 ├── pyproject.toml        # Project metadata and dependencies
 ├── uv.lock               # Reproducible dependency lockfile
 ├── run_daily.py          # Scheduler (scraper + analyzer)
