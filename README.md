@@ -394,7 +394,6 @@ After each `run_daily.py` cycle, a summary report:
 ├── profile.txt           # Your CV
 ├── pyproject.toml        # Project metadata and dependencies
 ├── uv.lock               # Reproducible dependency lockfile
-├── requirements.txt      # Runtime dependencies for legacy pip users
 ├── run_daily.py          # Scheduler (scraper + analyzer)
 ├── scraper.py            # Job scraper
 ├── telegram_notify.py    # Telegram notifications

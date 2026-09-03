@@ -1,5 +1,0 @@
-python-jobspy>=1.1.82
-linkedin-scraper>=3.0.0
-playwright>=1.52.0
-python-dotenv>=1.1.0
-python-telegram-bot>=22.0
