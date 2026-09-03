@@ -19,7 +19,6 @@ from telegram_notify import send_message, format_job_analysis, parse_gemini_resp
 from gemini_client import submit_to_gemini, build_prompt
 from analysis_validation import is_valid_analysis
 
-CHAT_ID = DEFAULT_CHAT_ID  # Hardcoded from config
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds
 
@@ -168,7 +167,11 @@ async def main():
     parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
     parser.add_argument("--skip-seen", action="store_true", help="Skip jobs with successful analysis already recorded")
     parser.add_argument("--retries", type=int, default=MAX_RETRIES, help="Max retries per job on Gemini failure")
+    parser.add_argument("--chat-id", default=DEFAULT_CHAT_ID, help="Telegram chat ID to notify")
     args = parser.parse_args()
+
+    if not args.chat_id:
+        parser.error("No Telegram chat ID: set TELEGRAM_CHAT_ID in .env or pass --chat-id")
 
     print(f"Loading profile from {args.profile}...")
     profile = load_profile(args.profile)
@@ -206,7 +209,7 @@ async def main():
             result = await analyze_job(
                 job,
                 profile,
-                CHAT_ID,
+                args.chat_id,
                 args.browser_path,
                 args.retries,
                 args.browser_executable,

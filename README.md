@@ -18,7 +18,7 @@ uv sync
 uv run playwright install chromium
 
 # 3. Configure environment
-cp .env.example .env  # Add your Telegram bot token
+cp .env.example .env  # Add your Telegram bot token and chat ID
 
 # 4. Add your CV
 cp profile.example.txt profile.txt  # then edit it with your own CV
@@ -120,27 +120,26 @@ Create `.env` file:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your-bot-token-here
+TELEGRAM_CHAT_ID=your-chat-id
+BROWSER_PROFILE_PATH=path/to/your/Brave/User Data
 ```
 
 Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
 
 ### 3. Telegram Chat ID
 
-Message [@userinfobot](https://t.me/userinfobot) to get your chat ID.
-
-Update `config.py`:
-```python
-DEFAULT_CHAT_ID = "your-chat-id"
-```
+Message [@userinfobot](https://t.me/userinfobot) to get your chat ID, then set
+`TELEGRAM_CHAT_ID` in `.env` (or pass `--chat-id`). The analyzer refuses to run
+without one.
 
 ### 4. Browser Profile (for Gemini)
 
 The analyzer uses Brave browser with an existing profile that's logged into Gemini.
 
 **Option A: Use existing Brave profile**
-```python
-# config.py
-BROWSER_PROFILE_PATH = "path/to/your/Brave/User Data"
+```bash
+# .env
+BROWSER_PROFILE_PATH=path/to/your/Brave/User Data
 ```
 
 **Option B: Install Brave Nightly** (Linux)
@@ -437,9 +436,9 @@ Key settings in `config.py`:
 
 | Setting | Description |
 |---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
-| `DEFAULT_CHAT_ID` | Your Telegram chat ID |
-| `BROWSER_PROFILE_PATH` | Path to Brave browser profile |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token (env) |
+| `DEFAULT_CHAT_ID` | Telegram chat ID, from `TELEGRAM_CHAT_ID` (env) |
+| `BROWSER_PROFILE_PATH` | Browser profile dir, from `BROWSER_PROFILE_PATH` (env) |
 | `PROFILE_FILE` | Path to your CV text file |
 | `JOBS_INPUT_FILE` | Default jobs file |
 | `ANALYSIS_OUTPUT_FILE` | Analysis results file |

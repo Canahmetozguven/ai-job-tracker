@@ -8,8 +8,8 @@ load_dotenv()
 # Telegram Bot Token (bot that sends messages)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Browser Profile Path (Brave backup with authenticated session)
-BROWSER_PROFILE_PATH = os.getenv("BROWSER_PROFILE_PATH") or "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
+# Browser profile directory holding a session already signed in to Gemini
+BROWSER_PROFILE_PATH = os.getenv("BROWSER_PROFILE_PATH") or "browser-profile"
 
 # Optional browser executable for Gemini automation
 GEMINI_BROWSER_EXECUTABLE = os.getenv("GEMINI_BROWSER_EXECUTABLE") or None
@@ -22,8 +22,8 @@ ANALYSIS_OUTPUT_FILE = "analysis_results.jsonl"
 # Gemini settings
 GEMINI_URL = "https://gemini.google.com/app"
 
-# Default Telegram chat ID (override with --chat-id argument)
-DEFAULT_CHAT_ID = "1949164657"
+# Telegram chat that receives alerts (override with --chat-id argument)
+DEFAULT_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Prompt template for Gemini analysis
 PROMPT_TEMPLATE = """Analyze this job posting for an actionable shortlist decision.

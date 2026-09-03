@@ -25,3 +25,14 @@ def test_template_has_no_embedded_cv():
     prompt = build_prompt("", JOB).lower()
     for leak in ("@gmail.com", "@example.com", "professional experience", "education"):
         assert leak not in prompt
+
+
+def test_no_operator_identity_in_application_code():
+    """Config must not ship anyone's CV, contact details, or machine paths."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for name in ("config.py", "analyzer.py"):
+        source = (root / name).read_text()
+        for leak in ("1949164657", "MR1KOEH", "@gmail.com", "05396879669"):
+            assert leak not in source, f"{name} still embeds {leak}"
