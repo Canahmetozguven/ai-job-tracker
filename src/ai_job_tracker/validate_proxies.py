@@ -3,7 +3,6 @@
 
 import urllib.request
 import urllib.error
-import sys
 import concurrent.futures
 from typing import List, Tuple
 
@@ -39,14 +38,11 @@ def save_proxies(proxies: List[str], path: str):
         for proxy in proxies:
             f.write(proxy + "\n")
 
-def main():
-    if len(sys.argv) < 3:
-        print("Usage: job-validate-proxies <input_file> <output_file>")
-        sys.exit(1)
+def validate(input_file: str, output_file: str) -> int:
+    """Test every proxy in `input_file`, saving the working ones to `output_file`.
 
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
-
+    Returns the number of working proxies found.
+    """
     print(f"Loading proxies from {input_file}...")
     proxies = load_proxies(input_file)
     print(f"Loaded {len(proxies)} proxies, testing with {MAX_WORKERS} workers...")
@@ -83,6 +79,9 @@ def main():
     print(f"\nFound {len(final_proxies)} working proxies (fastest first)")
     save_proxies(final_proxies, output_file)
     print(f"Saved to {output_file}")
+    return len(final_proxies)
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()

@@ -1,4 +1,4 @@
-"""Tests for career_scraper.py CLI (orchestrator)."""
+"""Tests for the career-site scraper core and its `job career` command."""
 
 import json
 import sys
@@ -6,8 +6,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from typer.testing import CliRunner
+
 from ai_job_tracker import career_scraper as cs
 from ai_job_tracker.career_scrapers.base import BaseCareerScraper
+from ai_job_tracker.cli import app
 
 
 class AmazonScraperMock(BaseCareerScraper):
@@ -26,13 +29,30 @@ class AppleScraperMock(BaseCareerScraper):
         return []
 
 
-def test_cli_help_shows_expected_flags(capsys):
-    with pytest.raises(SystemExit) as exc:
-        cs.main(["--help"])
-    assert exc.value.code == 0
-    out = capsys.readouterr().out
+def test_career_help_shows_expected_flags():
+    result = CliRunner().invoke(app, ["career", "--help"])
+    assert result.exit_code == 0
     for flag in ["--query", "--limit", "--hours", "--output", "--append", "--no-proxy", "--proxy"]:
-        assert flag in out
+        assert flag in result.output
+
+
+def test_career_command_propagates_exit_code(tmp_path):
+    """`job career` must surface run()'s exit code, not swallow it."""
+    def boom(self, query, limit=50):
+        raise RuntimeError("upstream down")
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
+        with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
+             patch.object(AppleScraperMock, "fetch_jobs", boom):
+            result = CliRunner().invoke(
+                app, ["career", "--query", "ds", "--output", str(tmp_path / "o.jsonl")]
+            )
+    assert result.exit_code == 1
+
+
+def test_career_requires_query():
+    result = CliRunner().invoke(app, ["career", "--output", "x.jsonl"])
+    assert result.exit_code != 0
 
 
 def test_cli_invokes_each_registered_scraper(tmp_path):
@@ -59,9 +79,8 @@ def test_cli_invokes_each_registered_scraper(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", fake_fetch), \
              patch.object(AppleScraperMock, "fetch_jobs", fake_fetch):
-            with pytest.raises(SystemExit) as exc:
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
-    assert exc.value.code == 0
+            code = cs.run(query="data scientist", output=output, append=True)
+    assert code == 0
 
     lines = open(output).readlines()
     assert len(lines) == 2
@@ -89,9 +108,8 @@ def test_cli_skips_failing_scraper_and_continues(tmp_path, capsys):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", ok), \
              patch.object(AppleScraperMock, "fetch_jobs", boom):
-            with pytest.raises(SystemExit) as exc:
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
-    assert exc.value.code == 0
+            code = cs.run(query="data scientist", output=output, append=True)
+    assert code == 0
     assert "Apple" in capsys.readouterr().out
     lines = open(output).readlines()
     assert len(lines) == 1
@@ -106,9 +124,8 @@ def test_cli_exits_1_when_all_scrapers_fail(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
              patch.object(AppleScraperMock, "fetch_jobs", boom):
-            with pytest.raises(SystemExit) as exc:
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
-    assert exc.value.code == 1
+            code = cs.run(query="data scientist", output=output, append=True)
+    assert code == 1
 
 
 def test_cli_exits_1_when_all_scrapers_return_empty(tmp_path):
@@ -121,9 +138,8 @@ def test_cli_exits_1_when_all_scrapers_return_empty(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", empty), \
              patch.object(AppleScraperMock, "fetch_jobs", empty):
-            with pytest.raises(SystemExit) as exc:
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
-    assert exc.value.code == 1
+            code = cs.run(query="data scientist", output=output, append=True)
+    assert code == 1
 
 
 def test_cli_exits_1_when_some_error_and_others_empty(tmp_path):
@@ -138,9 +154,8 @@ def test_cli_exits_1_when_some_error_and_others_empty(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", boom), \
              patch.object(AppleScraperMock, "fetch_jobs", empty):
-            with pytest.raises(SystemExit) as exc:
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
-    assert exc.value.code == 1
+            code = cs.run(query="data scientist", output=output, append=True)
+    assert code == 1
 
 
 def test_cli_dedupes_across_scrapers(tmp_path):
@@ -161,8 +176,7 @@ def test_cli_dedupes_across_scrapers(tmp_path):
     with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock, "Apple": AppleScraperMock}):
         with patch.object(AmazonScraperMock, "fetch_jobs", fetch_a), \
              patch.object(AppleScraperMock, "fetch_jobs", fetch_b):
-            with pytest.raises(SystemExit):
-                cs.main(["--query", "data scientist", "--output", output, "--append"])
+            cs.run(query="data scientist", output=output, append=True)
 
     lines = open(output).readlines()
     assert len(lines) == 1

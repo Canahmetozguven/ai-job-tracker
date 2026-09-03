@@ -24,13 +24,13 @@ cp .env.example .env  # Add your Telegram bot token and chat ID
 echo "Your CV text here..." > profile.txt
 
 # 5. Scrape jobs
-uv run job-scrape --query "data scientist" --location "Turkey" --hours 1
+uv run job scrape --query "data scientist" --location "Turkey" --hours 1
 
 # 6. Analyze with AI
-uv run job-analyze --jobs jobs.jsonl --hours 1
+uv run job analyze --jobs jobs.jsonl --hours 1
 
 # 7. Or run everything automatically (cron/scheduler)
-uv run job-daily
+uv run job daily
 ```
 
 ---
@@ -53,6 +53,7 @@ uv run job-daily
 
 | File | Purpose |
 |------|---------|
+| `src/ai_job_tracker/cli.py` | The `job` Typer app — every command and flag |
 | `src/ai_job_tracker/scraper.py` | Scrapes jobs from JobSpy/LinkedIn, outputs JSONL |
 | `src/ai_job_tracker/analyzer.py` | Uses Gemini AI to evaluate job fit |
 | `src/ai_job_tracker/run_daily.py` | Combines scraper + analyzer for scheduled runs |
@@ -137,7 +138,7 @@ Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram. See
 Message [@userinfobot](https://t.me/userinfobot) to get your chat ID.
 
 Set `TELEGRAM_CHAT_ID` in `.env` as shown above, or pass `--chat-id` to
-`job-analyze`. The application intentionally has no default destination.
+`job analyze`. The application intentionally has no default destination.
 
 ### 4. Browser Profile (for Gemini)
 
@@ -167,26 +168,40 @@ Place your proxy list in `proxies/proxyscrape_raw.txt` (one `host:port` per line
 
 ## Usage
 
+Everything runs through one command. `job --help` lists the subcommands, and
+`job <command> --help` documents its flags:
+
+| Command | Purpose |
+|---------|---------|
+| `job scrape` | Scrape jobs from JobSpy/LinkedIn |
+| `job analyze` | Score jobs with Gemini and notify Telegram |
+| `job daily` | Full pipeline: proxies, three scrape passes, analysis |
+| `job career` | Scrape the Big Tech 7 career sites directly |
+| `job proxies` | Fetch free proxies from public sources |
+| `job validate-proxies` | Test a proxy list, keep the working ones |
+
+Shell completion is available via `job --install-completion`.
+
 ### Scraper
 
 ```bash
 # Interactive mode (prompts for input)
-uv run job-scrape
+uv run job scrape
 
 # Command-line mode
-uv run job-scrape --query "data scientist" --location "Turkey" --limit 20
+uv run job scrape --query "data scientist" --location "Turkey" --limit 20
 
 # Scrape only recent jobs (last 3 hours)
-uv run job-scrape --query "data scientist" --location "Turkey" --hours 3
+uv run job scrape --query "data scientist" --location "Turkey" --hours 3
 
 # Daemon mode (continuous scraping)
-uv run job-scrape --query "data scientist" --location "Turkey" --daemon --interval 30
+uv run job scrape --query "data scientist" --location "Turkey" --daemon --interval 30
 
 # Multiple sources with fallback
-uv run job-scrape --source 3  # JobSpy → LinkedIn fallback
+uv run job scrape --source 3  # JobSpy → LinkedIn fallback
 
 # Big Tech 7 pass (global, company-filtered)
-uv run job-scrape --query "data scientist" --country worldwide --big-tech --hours 1
+uv run job scrape --query "data scientist" --country worldwide --big-tech --hours 1
 ```
 
 | Option | Default | Description |
@@ -207,16 +222,16 @@ uv run job-scrape --query "data scientist" --country worldwide --big-tech --hour
 
 ```bash
 # Analyze all jobs in file
-uv run job-analyze --jobs jobs.jsonl
+uv run job analyze --jobs jobs.jsonl
 
 # Analyze only recent jobs (last 3 hours)
-uv run job-analyze --jobs jobs.jsonl --hours 3
+uv run job analyze --jobs jobs.jsonl --hours 3
 
 # Skip already-analyzed jobs
-uv run job-analyze --jobs jobs.jsonl --skip-seen
+uv run job analyze --jobs jobs.jsonl --skip-seen
 
 # Limit to 5 jobs
-uv run job-analyze --jobs jobs.jsonl --limit 5
+uv run job analyze --jobs jobs.jsonl --limit 5
 ```
 
 | Option | Default | Description |
@@ -235,13 +250,13 @@ Combines scraper + analyzer in sequence with proxy validation and retry support:
 
 ```bash
 # Single run
-uv run job-daily
+uv run job daily
 
 # Override the destination for this run
-uv run job-daily --chat-id "your-chat-id"
+uv run job daily --chat-id "your-chat-id"
 
 # For cron (runs every 30 minutes)
-*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job-daily >> cron.log 2>&1
+*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job daily >> cron.log 2>&1
 ```
 
 The daily runner:
@@ -257,12 +272,12 @@ Standalone tool to fetch fresh proxies from online sources:
 
 ```bash
 # Scrape all sources
-uv run job-proxies
+uv run job proxies
 
 # Scrape specific source only
-uv run job-proxies --source 1   # ProxyScrape
-uv run job-proxies --source 2   # Free Proxy List
-uv run job-proxies --source 3   # GeoNode
+uv run job proxies --source 1   # ProxyScrape
+uv run job proxies --source 2   # Free Proxy List
+uv run job proxies --source 3   # GeoNode
 ```
 
 Proxies are appended to `proxies/proxyscrape_raw.txt`. `src/ai_job_tracker/run_daily.py` automatically calls this before validation.
@@ -272,7 +287,7 @@ Proxies are appended to `proxies/proxyscrape_raw.txt`. `src/ai_job_tracker/run_d
 Standalone tool to test and filter proxies:
 
 ```bash
-uv run job-validate-proxies proxies/proxyscrape_raw.txt proxies/working.txt
+uv run job validate-proxies proxies/proxyscrape_raw.txt proxies/working.txt
 ```
 
 | Option | Default | Description |
@@ -400,6 +415,7 @@ After each `src/ai_job_tracker/run_daily.py` cycle, a summary report:
 ├── uv.lock               # Reproducible dependency lockfile
 ├── profile.txt           # Your CV
 ├── src/ai_job_tracker/
+│   ├── cli.py                # `job` Typer app — all argument parsing
 │   ├── analyzer.py           # AI job analyzer (Gemini)
 │   ├── config.py             # Settings model (env / .env) + prompt template
 │   ├── gemini_client.py      # Browser automation for Gemini
@@ -437,7 +453,7 @@ For automatic hourly scraping + analysis:
 crontab -e
 
 # Add this line (runs every 30 minutes)
-*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job-daily >> cron.log 2>&1
+*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job daily >> cron.log 2>&1
 ```
 
 Logs are written to `cron.log` in the project directory.

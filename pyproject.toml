@@ -10,15 +10,11 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "python-jobspy>=1.1.82",
     "python-telegram-bot>=22.0",
+    "typer>=0.27.2",
 ]
 
 [project.scripts]
-job-scrape = "ai_job_tracker.scraper:main"
-job-analyze = "ai_job_tracker.analyzer:run"
-job-daily = "ai_job_tracker.run_daily:main"
-job-career = "ai_job_tracker.career_scraper:main"
-job-proxies = "ai_job_tracker.proxy_scraper:main"
-job-validate-proxies = "ai_job_tracker.validate_proxies:main"
+job = "ai_job_tracker.cli:app"
 
 [dependency-groups]
 dev = [

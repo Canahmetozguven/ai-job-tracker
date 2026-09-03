@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import urllib.error
@@ -267,37 +266,30 @@ def _scrape_single_source(source: int, output_path: str) -> dict[str, Any]:
     return {"total": len(proxies), "sources": {source_name: proxies}, "proxies": proxies}
 
 
-def main(argv: list[str] | None = None) -> dict[str, Any]:
-    """CLI entry point for fetching proxies."""
+def scrape(
+    *,
+    source: int | None = None,
+    output: str = DEFAULT_OUTPUT_PATH,
+) -> dict[str, Any]:
+    """Fetch proxies from one source (1-3) or all of them, and save them.
 
-    parser = argparse.ArgumentParser(description="Fetch free proxies from public sources")
-    parser.add_argument(
-        "--source",
-        type=int,
-        choices=[1, 2, 3],
-        help="Fetch only one source: 1=ProxyScrape, 2=Free Proxy List, 3=GeoNode",
-    )
-    parser.add_argument(
-        "--output",
-        default=DEFAULT_OUTPUT_PATH,
-        help=f"Output path (default: {DEFAULT_OUTPUT_PATH})",
-    )
-
-    args = parser.parse_args(argv)
-
-    if args.source:
-        result = _scrape_single_source(args.source, args.output)
+    Returns the result mapping so callers can inspect counts per source.
+    """
+    if source:
+        result = _scrape_single_source(source, output)
         source_name = next(iter(result["sources"]))
         print(f"Fetched {result['total']} proxies from {source_name}")
     else:
-        result = scrape_all(output_path=args.output)
+        result = scrape_all(output_path=output)
         print(
             f"Fetched {result['total']} unique proxies from {len(result['sources'])} sources"
         )
 
-    print(f"Saved to {args.output}")
+    print(f"Saved to {output}")
     return result
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()

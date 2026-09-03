@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Job scraper + analyzer runner for cron jobs with proxy validation + retry."""
 
-import argparse
 import asyncio
 import json
 import os
@@ -184,7 +183,7 @@ def validate_proxies() -> list[str]:
 
     print(f"Validating proxies from {PROXY_INPUT}...")
     result = subprocess.run([
-        PYTHON, "-m", "ai_job_tracker.validate_proxies",
+        PYTHON, "-m", "ai_job_tracker.cli", "validate-proxies",
         PROXY_INPUT, PROXY_OUTPUT
     ], capture_output=True, text=True)
     print(result.stdout)
@@ -251,20 +250,8 @@ def _update_pass_summary(pass_key: str, scrape_ok: bool) -> None:
     bucket["found"] = count_total
     bucket["new"] = count_recent
 
-def main(argv: list[str] | None = None):
-    parser = argparse.ArgumentParser(description="Run the daily job-tracking pipeline")
-    parser.add_argument(
-        "--chat-id",
-        default=settings.telegram_chat_id,
-        help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
-    )
-    args = parser.parse_args(argv)
-
-    try:
-        _, chat_id = require_telegram_credentials(settings.telegram_bot_token, args.chat_id)
-    except ValueError as exc:
-        parser.error(str(exc))
-
+def run(chat_id: str):
+    """Run the daily pipeline against an already-validated Telegram chat id."""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Job scraper + analyzer starting...")
     
     # Step 1: Re-validate proxies (fresh list each run)
@@ -285,7 +272,7 @@ def main(argv: list[str] | None = None):
     print("\nStep 3: Scraping new jobs (last 1 hour)...")
     print("  -> Pass 1: Turkey-local jobs")
     scrape_ok_a = run_command([
-        PYTHON, "-m", "ai_job_tracker.scraper",
+        PYTHON, "-m", "ai_job_tracker.cli", "scrape",
         "--query", "data scientist",
         "--country", "turkey",
         "--location", "Turkey",
@@ -298,7 +285,7 @@ def main(argv: list[str] | None = None):
 
     print("  -> Pass 2: Big Tech 7 (global, company-filtered)")
     scrape_ok_b = run_command([
-        PYTHON, "-m", "ai_job_tracker.scraper",
+        PYTHON, "-m", "ai_job_tracker.cli", "scrape",
         "--query", "data scientist",
         "--country", "worldwide",
         "--big-tech",
@@ -313,7 +300,7 @@ def main(argv: list[str] | None = None):
     # LinkedIn, so a daily cron needs to look back further to catch anything new.
     print("  -> Pass 3: Big Tech career sites (direct, all 7)")
     scrape_ok_c = run_command([
-        PYTHON, "-m", "ai_job_tracker.career_scraper",
+        PYTHON, "-m", "ai_job_tracker.cli", "career",
         "--query", "data scientist",
         "--hours", "168",                # 7 days — career sites update less often
         "--output", "jobs_linkedin.jsonl",
@@ -331,7 +318,7 @@ def main(argv: list[str] | None = None):
     print("\nStep 4: Analyzing new jobs...")
     analysis_results_before = count_jsonl_lines("analysis_results.jsonl")
     analyze_ok = run_command([
-        PYTHON, "-m", "ai_job_tracker.analyzer",
+        PYTHON, "-m", "ai_job_tracker.cli", "analyze",
         "--jobs", "jobs_linkedin.jsonl",
         "--hours", "1",
         "--skip-seen",
@@ -351,5 +338,7 @@ def main(argv: list[str] | None = None):
     print_summary(chat_id=chat_id)
     print("\nDone!")
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()

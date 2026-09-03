@@ -11,27 +11,10 @@ Exit codes:
 
 from __future__ import annotations
 
-import argparse
 import os
-import sys
 
 from ai_job_tracker.career_scrapers import SCRAPERS, BaseCareerScraper
 from ai_job_tracker.scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
-
-
-def _build_argparser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="Big Tech 7 career-site scraper (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla)"
-    )
-    p.add_argument("--query", required=True, help="Job search query")
-    p.add_argument("--limit", "-n", type=int, default=50, help="Max results per scraper")
-    p.add_argument("--hours", "-H", type=int, default=0,
-                   help="Filter by age (hours), 0=disabled. Currently a no-op for career sites; reserved for future use.")
-    p.add_argument("--output", "-o", default="jobs_career.jsonl", help="Output file path")
-    p.add_argument("--append", "-a", action="store_true", help="Append to output file (don't overwrite)")
-    p.add_argument("--no-proxy", action="store_true", help="Disable proxy rotation")
-    p.add_argument("--proxy", help="Use a specific proxy instead of random")
-    return p
 
 
 def _print_per_scraper_summary(results: dict, errors: dict) -> None:
@@ -44,17 +27,25 @@ def _print_per_scraper_summary(results: dict, errors: dict) -> None:
             print(f"  ✅ {name}: {count} job(s)")
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _build_argparser().parse_args(argv)
-    sys.exit(_run(args))
+def run(
+    *,
+    query: str,
+    limit: int = 50,
+    hours: int = 0,
+    output: str = "jobs_career.jsonl",
+    append: bool = False,
+    no_proxy: bool = False,
+    proxy: str | None = None,
+) -> int:
+    """Scrape every registered career site and write deduped results.
 
-
-def _run(args: argparse.Namespace) -> int:
-    output: str = args.output
-    proxy: str | None = None if args.no_proxy else args.proxy
+    Returns the process exit code: 0 if any scraper contributed records,
+    1 if every scraper either raised or returned nothing.
+    """
+    proxy = None if no_proxy else proxy
 
     existing_urls: set[str] = set()
-    if args.append and os.path.exists(output):
+    if append and os.path.exists(output):
         existing_urls = read_existing_jobs(output)
         print(f"Loaded {len(existing_urls)} existing job URLs from {output}")
 
@@ -64,7 +55,7 @@ def _run(args: argparse.Namespace) -> int:
     for name, scraper_cls in SCRAPERS.items():
         try:
             scraper: BaseCareerScraper = scraper_cls(proxy=proxy)
-            records = scraper.fetch_jobs(args.query, limit=args.limit)
+            records = scraper.fetch_jobs(query, limit=limit)
             results[name] = records
             print(f"  [{name}] fetched {len(records)} record(s)")
         except Exception as e:
@@ -93,5 +84,7 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()

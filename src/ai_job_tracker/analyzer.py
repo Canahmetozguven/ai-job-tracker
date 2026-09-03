@@ -2,9 +2,8 @@
 
 import asyncio
 import json
-import argparse
 from datetime import datetime, timedelta
-from ai_job_tracker.config import require_telegram_credentials, settings
+from ai_job_tracker.config import settings
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs
 from ai_job_tracker.telegram_notify import send_message, format_job_analysis, parse_gemini_response
@@ -147,58 +146,45 @@ def save_result(result: dict, output_path: str):
     with open(output_path, "a") as f:
         f.write(json.dumps(result) + "\n")
 
-async def main():
-    parser = argparse.ArgumentParser(description="Job analyzer with Gemini AI")
-    parser.add_argument("--profile", default=settings.profile_file, help="Profile file path")
-    parser.add_argument("--jobs", default=settings.jobs_input_file, help="Jobs input file")
-    parser.add_argument("--limit", type=int, default=0, help="Limit jobs to process (0=all)")
-    parser.add_argument("--browser-path", default=settings.browser_profile_path, help="Browser profile path")
-    parser.add_argument(
-        "--browser-executable",
-        default=settings.gemini_browser_executable,
-        help="Optional browser executable for Gemini; falls back to common browsers or bundled Chromium",
-    )
-    parser.add_argument("--output", default=settings.analysis_output_file, help="Output file for results")
-    parser.add_argument(
-        "--chat-id",
-        default=settings.telegram_chat_id,
-        help="Telegram destination (defaults to TELEGRAM_CHAT_ID)",
-    )
-    parser.add_argument("--hours", type=int, default=0, help="Only analyze jobs posted in last N hours (0=all)")
-    parser.add_argument("--skip-seen", action="store_true", help="Skip jobs with successful analysis already recorded")
-    parser.add_argument("--retries", type=int, default=MAX_RETRIES, help="Max retries per job on Gemini failure")
-    args = parser.parse_args()
+async def run_analysis(
+    *,
+    profile_path: str,
+    jobs_path: str,
+    output: str,
+    chat_id: str,
+    telegram_token: str,
+    browser_path: str,
+    browser_executable: str | None = None,
+    limit: int = 0,
+    hours: int = 0,
+    skip_seen: bool = False,
+    retries: int = MAX_RETRIES,
+) -> None:
+    """Analyze jobs with Gemini using fully resolved options.
 
-    try:
-        telegram_token, chat_id = require_telegram_credentials(
-            settings.telegram_bot_token,
-            args.chat_id,
-        )
-    except ValueError as exc:
-        parser.error(str(exc))
+    Parsing and credential validation live in ai_job_tracker.cli; this takes
+    settled values only, including an already-validated Telegram token.
+    """
+    print(f"Loading profile from {profile_path}...")
+    profile = load_profile(profile_path)
 
-    print(f"Loading profile from {args.profile}...")
-    profile = load_profile(args.profile)
-
-    print(f"Loading jobs from {args.jobs}...")
-    jobs = list(load_jobs(args.jobs))
+    print(f"Loading jobs from {jobs_path}...")
+    jobs = list(load_jobs(jobs_path))
     print(f"Found {len(jobs)} total jobs")
 
-    # Filter by hours
-    if args.hours > 0:
-        jobs = filter_recent_jobs(jobs, args.hours)
-        print(f"Filtered to {len(jobs)} jobs from last {args.hours} hours")
+    if hours > 0:
+        jobs = filter_recent_jobs(jobs, hours)
+        print(f"Filtered to {len(jobs)} jobs from last {hours} hours")
 
-    # Skip already seen
-    if args.skip_seen:
-        seen_urls = get_seen_urls(args.output)
+    if skip_seen:
+        seen_urls = get_seen_urls(output)
         original_count = len(jobs)
         jobs = [j for j in jobs if j.get('job_url') not in seen_urls]
         print(f"Skipped {original_count - len(jobs)} already analyzed jobs")
 
-    if args.limit > 0:
-        jobs = jobs[:args.limit]
-        print(f"Limited to {args.limit} jobs")
+    if limit > 0:
+        jobs = jobs[:limit]
+        print(f"Limited to {limit} jobs")
 
     if not jobs:
         print("No jobs to process")
@@ -214,31 +200,28 @@ async def main():
                 job,
                 profile,
                 chat_id,
-                args.browser_path,
-                args.retries,
-                args.browser_executable,
+                browser_path,
+                retries,
+                browser_executable,
                 telegram_token,
             )
-            save_result(result, args.output)
+            save_result(result, output)
             success_count += 1
             print(f"  ✓ Done - Score: {result['analysis'].get('score', 'N/A')}")
         except Exception as e:
             error_count += 1
             print(f"  ✗ Error: {e}")
-            # Save error result too
-            save_result({'job': job, 'error': str(e)}, args.output)
+            save_result({'job': job, 'error': str(e)}, output)
 
-        # Delay between jobs to avoid rate limiting
         if i < len(jobs) - 1:
             await asyncio.sleep(8)
 
     print(f"\n{'='*50}")
     print(f"Complete: {success_count} succeeded, {error_count} failed")
-    print(f"Results saved to {args.output}")
+    print(f"Results saved to {output}")
 
-def run() -> None:
-    """Console-script entry point for the async main()."""
-    asyncio.run(main())
 
-if __name__ == "__main__":
-    run()
+if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+    from ai_job_tracker.cli import app
+
+    app()
