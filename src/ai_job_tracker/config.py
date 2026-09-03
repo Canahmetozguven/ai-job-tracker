@@ -78,46 +78,12 @@ def require_telegram_credentials(
         raise ValueError(f"Missing required Telegram configuration: {', '.join(missing)}")
     return token.strip(), chat_id.strip()
 
-# Prompt template for Gemini analysis. Not a setting: it is a 60-line template
-# with the profile embedded, which does not belong in a .env value.
+# Prompt template for Gemini analysis. Not a setting: the selected profile's
+# contents are inserted at runtime, while the template stays constant.
 PROMPT_TEMPLATE = """Analyze this job posting for an actionable shortlist decision.
 
 MY PROFILE:
-CAN AHMET ÖZGÜVEN
-DATA SCIENTIST
-Ankara | 05396879669 | canahmetozguven@gmail.com
-
-SUMMARY
-Data Scientist with a unique background in Psychological Counseling, blending deep analytical skills with an understanding of human behavior. Specializes in Health & Benefits Technology, transforming complex clinical and behavioral data into production-grade signals that drive user engagement and wellness outcomes. Proficient in building end-to-end ELT processes in Google BigQuery, integrating Generative AI (LLMs) into production pipelines, and accelerating development workflows using AI-native tools (Cursor, Claude). Experienced in remote, international cross-functional teams.
-
-PROFESSIONAL EXPERIENCE
-Data Scientist | Well | Remote (US-Based) | Nov 2023 - Present
-- Machine Learning & Model Optimization: Engineered features for the Consumer Action Engagement Model, utilizing behavioral signals to achieve a 3% improvement in model performance. Integrated MLflow into the training pipeline for robust experiment tracking, model registry, and reproducible lifecycle management.
-- Pipeline Architecture & Optimization: Refactored core consumer data pipelines to align real-time PostgreSQL transactional data with BigQuery, achieving a 3-5% performance improvement. Designed a sampling-based testing framework that validates pipeline logic.
-- Clinical Data Modeling & Feature Engineering: Designed and maintained production-grade "Fact" tables in Google BigQuery and SQL to identify clinical signals (GLP-1 weight loss usage, nicotine dependence). These models power personalized member coaching and downstream analytics.
-- GenAI Integration & AI-Native Workflows: Integrated Google Gemini (GenAI SDK) into production pipelines for structured text generation. Leveraged AI-driven development tools (Cursor, Claude, Gemini CLI) for code refactoring.
-- Enterprise Program Logic: Spearheaded data logic implementation for Premium Reduction and Wellness Incentive programs for major enterprise clients (Bank of America, UNC Health, USAA).
-
-Junior Python Developer | Smart Maple | Ankara, Türkiye | Oct 2022 - Nov 2023
-- Created end-to-end ETL/ELT, visualization, and cleaning pipelines using Python and SQL.
-- Employed web scraping techniques (Scrapy, Selenium, Playwright) to acquire external data.
-- Improved key business metrics by 10% through a new SQL data pipeline.
-- Designed and built a data visualization dashboard for data-driven business decisions.
-
-EDUCATION
-Bachelor's Degree in Psychological Counseling and Guidance | Kastamonu University | 2016 - 2021
-- GPA: 3.44/4.00 | ERASMUS+ Romania
-
-Python Data Science Career Track | DataCamp
-- Intensive bootcamp focused on data analysis and modeling.
-
-SKILLS
-- Programming: Python, SQL
-- ML: Machine Learning, Deep Learning, Generative AI, Data Analysis, Web Scraping, MLflow
-- Databases: PostgreSQL, Google BigQuery, MS SQL, NoSQL
-
-LANGUAGES
-Turkish — Native | English — Full Professional Proficiency
+{profile}
 
 JOB INFO:
 Title: {title}

@@ -21,7 +21,7 @@ uv run playwright install chromium
 cp .env.example .env  # Add your Telegram bot token and chat ID
 
 # 4. Add your CV
-echo "Your CV text here..." > profile.txt
+cp profile.example.txt profile.txt  # then edit it with your own CV
 
 # 5. Scrape jobs
 uv run job scrape --query "data scientist" --location "Turkey" --hours 1
@@ -61,7 +61,7 @@ uv run job daily
 | `src/ai_job_tracker/gemini_client.py` | Browser automation for Gemini |
 | `src/ai_job_tracker/config.py` | Settings model (`pydantic-settings`) + Big Tech matching |
 | `src/ai_job_tracker/validate_proxies.py` | Tests proxies in parallel, saves working ones |
-| `profile.txt` | Your CV as plain text |
+| `profile.example.txt` | Template CV — copy to `profile.txt` (gitignored) |
 
 ---
 
@@ -158,7 +158,8 @@ BROWSER_PROFILE_PATH=path/to/your/Brave/User Data
 
 ### 5. Your CV
 
-Edit `profile.txt` with your CV as plain text. This is included in every Gemini prompt.
+Copy `profile.example.txt` to `profile.txt` and replace it with your CV as plain text. The
+file is gitignored, and its contents are inserted into every Gemini prompt.
 
 ### 6. Proxy List
 
@@ -421,7 +422,7 @@ After each `src/ai_job_tracker/run_daily.py` cycle, a summary report:
 .
 ├── pyproject.toml        # Project metadata, dependencies, console scripts
 ├── uv.lock               # Reproducible dependency lockfile
-├── profile.txt           # Your CV
+├── profile.example.txt   # CV template (copy to gitignored profile.txt)
 ├── src/ai_job_tracker/
 │   ├── cli.py                # `job` Typer app — all argument parsing
 │   ├── analyzer.py           # AI job analyzer (Gemini)
@@ -490,6 +491,5 @@ Precedence is process environment > `.env` > default. The settings model lives
 in `src/ai_job_tracker/config.py` as a `pydantic-settings` `Settings` class;
 field names map to the upper-case keys above.
 
-The Gemini prompt template is deliberately *not* a setting — it is a 60-line
-template with your profile embedded, which does not fit in a `.env` value. It
-stays a constant in `config.py`.
+The Gemini prompt template is deliberately *not* a setting. It stays a constant
+in `config.py`, and the selected profile file's contents are inserted at runtime.

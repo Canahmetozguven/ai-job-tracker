@@ -1,0 +1,22 @@
+JANE DOE
+DATA SCIENTIST
+City, Country | your.email@example.com
+
+SUMMARY
+Two-sentence pitch: what you do, which domains you know, what you are looking for.
+
+PROFESSIONAL EXPERIENCE
+Job Title | Company | Location | Start - End
+- Achievement with a number in it.
+- Achievement with a number in it.
+
+EDUCATION
+Degree | School | Years
+
+SKILLS
+- Programming: Python, SQL
+- ML: ...
+- Databases: ...
+
+LANGUAGES
+English — Native
