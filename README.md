@@ -208,7 +208,8 @@ uv run job scrape --query "data scientist" --country worldwide --big-tech --hour
 `--interactive` prompts for every option. Without it, `job scrape` prompts only
 for `--query` and `--location` if they are missing (and skips the location
 prompt under `--big-tech`, which searches globally); everything else falls back
-to its documented default.
+to its documented default. Daemon mode reuses the proxy resolved at startup for
+each scrape cycle.
 
 | Option | Default | Description |
 |--------|---------|-------------|

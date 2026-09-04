@@ -84,6 +84,9 @@ def test_scrape_interactive_binds_every_option():
                 "daemon", "interval", "country", "big_tech",
                 "hours_old", "no_proxy", "specific_proxy"):
         assert key in options, f"prompt_for_options() must bind {key}"
+    assert options["hours_old"] == 0
+    assert options["no_proxy"] is False
+    assert options["specific_proxy"] is None
 
     # run_cli accepts exactly what prompt_for_options produces.
     with patch.object(scraper, "load_proxies", return_value=[]), \

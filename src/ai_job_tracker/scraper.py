@@ -285,7 +285,7 @@ async def run_daemon(config: dict, proxy: str = None):
 
     while True:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cycle_proxy = get_random_proxy(proxies) if proxies else None
+        cycle_proxy = proxy
         if cycle_proxy:
             print(f"[{timestamp}] Using proxy: {cycle_proxy}")
         print(f"\n{'='*50}")
