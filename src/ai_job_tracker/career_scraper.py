@@ -11,8 +11,10 @@ Exit codes:
 
 from __future__ import annotations
 
+import datetime
 import os
 
+from ai_job_tracker.career_freshness import filter_recent_jobs
 from ai_job_tracker.career_scrapers import SCRAPERS, BaseCareerScraper
 from ai_job_tracker.scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
 
@@ -36,6 +38,7 @@ def run(
     append: bool = False,
     no_proxy: bool = False,
     proxy: str | None = None,
+    current_time: datetime.datetime | None = None,
 ) -> int:
     """Scrape every registered career site and write deduped results.
 
@@ -43,6 +46,9 @@ def run(
     1 if every scraper either raised or returned nothing.
     """
     proxy = None if no_proxy else proxy
+    reference_time = current_time
+    if hours > 0 and reference_time is None:
+        reference_time = datetime.datetime.now(datetime.UTC)
 
     existing_urls: set[str] = set()
     if append and os.path.exists(output):
@@ -55,7 +61,12 @@ def run(
     for name, scraper_cls in SCRAPERS.items():
         try:
             scraper: BaseCareerScraper = scraper_cls(proxy=proxy)
-            records = scraper.fetch_jobs(query, limit=limit)
+            records = scraper.fetch_recent_jobs(
+                query,
+                limit=limit,
+                hours=hours,
+                current_time=reference_time,
+            )
             results[name] = records
             print(f"  [{name}] fetched {len(records)} record(s)")
         except Exception as e:
@@ -78,6 +89,11 @@ def run(
         n_empty = n_total - n_errored
         print(f"\nNo records from any scraper ({n_errored} errors, {n_empty} empty). Exiting 1.")
         return 1
+
+    if hours > 0:
+        unfiltered_count = len(all_records)
+        all_records = filter_recent_jobs(all_records, hours, current_time=reference_time)
+        print(f"\nFreshness filter kept {len(all_records)} of {unfiltered_count} job(s) from the last {hours} hours")
 
     new_count = append_jobs_jsonl(all_records, output, existing_urls)
     print(f"\nWrote {new_count} new job(s) to {output}")

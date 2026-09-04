@@ -1,5 +1,6 @@
 """Tests for the career-site scraper core and its `job career` command."""
 
+import datetime
 import json
 import sys
 from unittest.mock import patch, MagicMock
@@ -37,6 +38,7 @@ def test_career_help_shows_expected_flags():
     out = plain(result.output)
     for flag in ["--query", "--limit", "--hours", "--output", "--append", "--no-proxy", "--proxy"]:
         assert flag in out
+    assert "no-op" not in out
 
 
 def test_career_command_propagates_exit_code(tmp_path):
@@ -56,6 +58,117 @@ def test_career_command_propagates_exit_code(tmp_path):
 def test_career_requires_query():
     result = CliRunner(env=CLI_ENV).invoke(app, ["career", "--output", "x.jsonl"])
     assert result.exit_code != 0
+
+
+@pytest.mark.parametrize(
+    ("date_posted", "expected_to_keep"),
+    [
+        ("2026-09-03T12:00:00Z", True),
+        ("2026-09-03T15:00:00+03:00", True),
+        ("2026-09-03T12:00:00", True),
+        ("2026-09-03", True),
+        ("Sep 3, 2026", True),
+        ("2026-09-04", True),
+        ("Sep  4, 2026", True),
+        ("2026-09-04T12:00:01Z", False),
+        ("2026-09-05", False),
+        ("Sep 5, 2026", False),
+        ("2026-09-03T11:59:59Z", False),
+        ("Sep  2, 2026", False),
+        ("unknown", True),
+        (None, True),
+        ("not-a-date", True),
+    ],
+)
+def test_filter_recent_jobs_handles_supported_date_representations(date_posted, expected_to_keep):
+    current_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+    job = {"job_url": "https://example.com/job", "date_posted": date_posted}
+
+    filtered_jobs = cs.filter_recent_jobs([job], hours=24, current_time=current_time)
+
+    assert bool(filtered_jobs) is expected_to_keep
+
+
+def test_filter_recent_jobs_disables_filtering_when_hours_is_zero():
+    old_job = {"job_url": "https://example.com/old", "date_posted": "Jan 1, 2000"}
+
+    filtered_jobs = cs.filter_recent_jobs([old_job], hours=0)
+
+    assert filtered_jobs == [old_job]
+
+
+def test_amazon_dates_are_parsed_without_locale_sensitive_strptime(monkeypatch):
+    class NoStrptimeDatetime(datetime.datetime):
+        @classmethod
+        def strptime(cls, date_string, date_format):
+            raise AssertionError("locale-sensitive strptime must not parse Amazon dates")
+
+    monkeypatch.setattr("ai_job_tracker.career_freshness.datetime.datetime", NoStrptimeDatetime)
+    old_job = {"job_url": "https://example.com/old", "date_posted": "Jan 1, 2000"}
+    current_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+
+    filtered_jobs = cs.filter_recent_jobs([old_job], hours=24, current_time=current_time)
+
+    assert filtered_jobs == []
+
+
+def test_career_command_filters_old_jobs_using_hours(tmp_path):
+    output_path = tmp_path / "jobs.jsonl"
+    fetched_records = [
+        {"job_url": "https://example.com/old", "date_posted": "Jan 1, 2000"},
+        {"job_url": "https://example.com/unknown", "date_posted": "unknown"},
+    ]
+
+    with (
+        patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock}),
+        patch.object(AmazonScraperMock, "fetch_jobs", return_value=fetched_records),
+    ):
+        result = CliRunner(env=CLI_ENV).invoke(
+            app,
+            [
+                "career",
+                "--query",
+                "data scientist",
+                "--hours",
+                "24",
+                "--output",
+                str(output_path),
+                "--append",
+            ],
+        )
+
+    written_urls = [json.loads(line)["job_url"] for line in output_path.read_text().splitlines()]
+    assert result.exit_code == 0, plain(result.output)
+    assert written_urls == ["https://example.com/unknown"]
+
+
+def test_career_run_uses_one_reference_time_for_all_freshness_filters(tmp_path):
+    reference_times = []
+    boundary_job = {
+        "job_url": "https://example.com/boundary",
+        "date_posted": "Sep 4, 2026",
+    }
+
+    class ReferenceAwareScraper(AmazonScraperMock):
+        def fetch_recent_jobs(self, query, limit=50, hours=0, *, current_time=None):
+            reference_times.append(current_time)
+            return cs.filter_recent_jobs([boundary_job], hours, current_time=current_time)
+
+    current_time = datetime.datetime(2026, 9, 5, 0, 30, tzinfo=datetime.UTC)
+    output_path = tmp_path / "jobs.jsonl"
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": ReferenceAwareScraper}):
+        exit_code = cs.run(
+            query="data scientist",
+            hours=1,
+            output=str(output_path),
+            current_time=current_time,
+        )
+
+    written_urls = [json.loads(line)["job_url"] for line in output_path.read_text().splitlines()]
+    assert exit_code == 0
+    assert reference_times == [current_time]
+    assert written_urls == ["https://example.com/boundary"]
 
 
 def test_cli_invokes_each_registered_scraper(tmp_path):
