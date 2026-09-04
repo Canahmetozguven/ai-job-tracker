@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from ai_job_tracker.config import require_telegram_credentials, settings
 from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
 from ai_job_tracker import telegram_notify
-import telegram
 from ai_job_tracker import proxy_scraper
 
 # Child steps run as `-m` modules under the *same* interpreter running this
@@ -56,12 +55,7 @@ def send_telegram_summary(
             chat_id,
         )
         message = telegram_notify.format_run_summary(summary)
-        bot = telegram.Bot(token=telegram_token)
-        asyncio.run(bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode=telegram.constants.ParseMode.MARKDOWN
-        ))
+        asyncio.run(telegram_notify.send_message(chat_id, message, telegram_token))
         print("📱 Summary sent to Telegram")
     except Exception as e:
         print(f"⚠️ Failed to send Telegram summary: {e}")
