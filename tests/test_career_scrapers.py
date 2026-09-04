@@ -280,6 +280,34 @@ def test_amazon_scraper_uses_canonical_company_even_when_api_differs():
     assert records[0]["source_company"] == "Amazon"
 
 
+def test_amazon_freshness_fetch_paginates_past_old_results():
+    old_jobs = [
+        {
+            "title": f"Old role {index}",
+            "job_path": f"/en/jobs/old-{index}",
+            "posted_date": "Jan 1, 2000",
+        }
+        for index in range(50)
+    ]
+    recent_job = {
+        "title": "Recent role",
+        "job_path": "/en/jobs/recent",
+        "posted_date": "Dec 31, 2999",
+    }
+    responses = [
+        json.dumps({"hits": 51, "jobs": old_jobs}).encode(),
+        json.dumps({"hits": 51, "jobs": [recent_job]}).encode(),
+    ]
+    scraper = AmazonScraper()
+    scraper._get = MagicMock(side_effect=responses)
+
+    records = scraper.fetch_recent_jobs("data scientist", limit=1, hours=24)
+
+    assert [record["title"] for record in records] == ["Recent role"]
+    assert "offset=0" in scraper._get.call_args_list[0].args[0]
+    assert "offset=50" in scraper._get.call_args_list[1].args[0]
+
+
 # --- Stub scrapers (tier-2 and tier-3) ---
 
 

@@ -66,6 +66,8 @@ def test_career_requires_query():
         ("2026-09-03T12:00:00Z", True),
         ("2026-09-03T15:00:00+03:00", True),
         ("2026-09-03T12:00:00", True),
+        ("2026-09-03", True),
+        ("Sep 3, 2026", True),
         ("2026-09-04", True),
         ("Sep  4, 2026", True),
         ("2026-09-03T11:59:59Z", False),
@@ -90,6 +92,21 @@ def test_filter_recent_jobs_disables_filtering_when_hours_is_zero():
     filtered_jobs = cs.filter_recent_jobs([old_job], hours=0)
 
     assert filtered_jobs == [old_job]
+
+
+def test_amazon_dates_are_parsed_without_locale_sensitive_strptime(monkeypatch):
+    class NoStrptimeDatetime(datetime.datetime):
+        @classmethod
+        def strptime(cls, date_string, date_format):
+            raise AssertionError("locale-sensitive strptime must not parse Amazon dates")
+
+    monkeypatch.setattr("ai_job_tracker.career_freshness.datetime.datetime", NoStrptimeDatetime)
+    old_job = {"job_url": "https://example.com/old", "date_posted": "Jan 1, 2000"}
+    current_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+
+    filtered_jobs = cs.filter_recent_jobs([old_job], hours=24, current_time=current_time)
+
+    assert filtered_jobs == []
 
 
 def test_career_command_filters_old_jobs_using_hours(tmp_path):

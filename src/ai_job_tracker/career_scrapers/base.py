@@ -35,6 +35,10 @@ class BaseCareerScraper:
         """Override in subclass. Return records matching the common record schema."""
         raise NotImplementedError
 
+    def fetch_recent_jobs(self, query: str, limit: int = 50, hours: int = 0) -> list[dict]:
+        """Fetch jobs with upstream freshness handling when a source supports it."""
+        return self.fetch_jobs(query, limit=limit)
+
     def _throttle(self) -> None:
         elapsed = time.monotonic() - self._last_request_at
         if elapsed < self.rate_limit_seconds:

@@ -18,6 +18,7 @@ a usable record and would otherwise pollute the JSONL with homepage URLs.
 import json
 from urllib.parse import urlencode
 
+from ai_job_tracker.career_freshness import filter_recent_jobs
 from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 
 
@@ -27,16 +28,24 @@ class AmazonScraper(BaseCareerScraper):
     rate_limit_seconds = 1.0
 
     SEARCH_URL = "https://amazon.jobs/en/search.json"
+    PAGE_SIZE = 50
 
-    def fetch_jobs(self, query: str, limit: int = 50) -> list[dict]:
+    def _fetch_page(self, query: str, limit: int, offset: int) -> dict:
         # Amazon's search is driven by `base_query` (not `keywords`). Use
         # urlencode so spaces/special chars in `query` are properly escaped.
-        params = urlencode({"base_query": query, "loc_query": "", "result_limit": limit})
+        params = urlencode({
+            "base_query": query,
+            "loc_query": "",
+            "result_limit": limit,
+            "offset": offset,
+        })
         url = f"{self.SEARCH_URL}?{params}"
         body = self._get(url)
-        data = json.loads(body)
+        return json.loads(body)
+
+    def _parse_jobs(self, jobs: list[dict]) -> list[dict]:
         records = []
-        for job in data.get("jobs", []):
+        for job in jobs:
             title = job.get("title", "")
             job_path = job.get("job_path", "")
             if not title or not job_path:
@@ -51,3 +60,35 @@ class AmazonScraper(BaseCareerScraper):
                 date_posted=job.get("posted_date"),
             ))
         return records
+
+    def fetch_jobs(self, query: str, limit: int = 50) -> list[dict]:
+        if limit <= 0:
+            return []
+        page = self._fetch_page(query, limit, offset=0)
+        return self._parse_jobs(page.get("jobs", []))
+
+    def fetch_recent_jobs(self, query: str, limit: int = 50, hours: int = 0) -> list[dict]:
+        """Page through score-sorted results until enough recent jobs are found."""
+        if hours <= 0:
+            return self.fetch_jobs(query, limit=limit)
+        if limit <= 0:
+            return []
+
+        recent_records = []
+        offset = 0
+        page_size = self.PAGE_SIZE
+
+        while len(recent_records) < limit:
+            page = self._fetch_page(query, page_size, offset)
+            jobs = page.get("jobs", [])
+            recent_records.extend(filter_recent_jobs(self._parse_jobs(jobs), hours))
+            offset += len(jobs)
+
+            total_hits = page.get("hits")
+            source_exhausted = not jobs or (
+                isinstance(total_hits, int) and offset >= total_hits
+            )
+            if source_exhausted or (not isinstance(total_hits, int) and len(jobs) < page_size):
+                break
+
+        return recent_records[:limit]
