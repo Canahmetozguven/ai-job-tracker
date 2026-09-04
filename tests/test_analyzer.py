@@ -523,7 +523,7 @@ def test_print_summary_marks_partial_analysis_as_issues_detected_and_partial_sta
 
 
 def test_format_run_summary_renders_three_pass_breakdown():
-    """Three-pass summary: render one row per pass (Turkey + Big Tech 7 + Career sites)."""
+    """Three-pass summary: render one row per pass (Turkey + Big Tech 7 + Amazon Careers)."""
     from ai_job_tracker.telegram_notify import format_run_summary
     summary = {
         "proxy_validation": {"working": 1, "total": 1, "selected": "127.0.0.1:8080"},
@@ -538,7 +538,8 @@ def test_format_run_summary_renders_three_pass_breakdown():
     msg = format_run_summary(summary)
     assert "🇹🇷 Turkey local" in msg
     assert "🌍 Big Tech 7" in msg
-    assert "🏢 Career sites" in msg
+    assert "🏢 Amazon Careers" in msg
+    assert "🏢 Career sites" not in msg
     assert "Found: 5" in msg
     assert "✅ *SUCCESS*" in msg
 
@@ -556,6 +557,6 @@ def test_format_run_summary_career_site_failure_does_not_kill_run():
         "errors": [],
     }
     msg = format_run_summary(summary)
-    assert "❌ 🏢 Career sites" in msg
+    assert "❌ 🏢 Amazon Careers" in msg
     # Turkey + Big Tech still pass, so overall is success.
     assert "✅ *SUCCESS*" in msg
