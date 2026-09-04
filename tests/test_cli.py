@@ -1,5 +1,6 @@
 """Tests for the `job` Typer app that fronts every pipeline step."""
 
+import json
 import tomllib
 from importlib import import_module
 from unittest.mock import patch
@@ -73,6 +74,47 @@ def test_scrape_rejects_source_outside_range():
     assert runner.invoke(app, ["scrape", "--query", "ds", "--source", "9"]).exit_code != 0
 
 
+@pytest.mark.parametrize(
+    ("append_arguments", "expected_titles"),
+    [
+        ([], ["Fresh result", "New result"]),
+        (["--append"], ["Stored result", "New result"]),
+    ],
+)
+def test_scrape_output_mode_matches_append_flag(tmp_path, append_arguments, expected_titles):
+    output_path = tmp_path / "jobs.jsonl"
+    output_path.write_text(
+        json.dumps({"job_url": "https://existing.example/job", "title": "Stored result"}) + "\n"
+    )
+    scraped_jobs = [
+        {"job_url": "https://existing.example/job", "title": "Fresh result"},
+        {"job_url": "https://new.example/job", "title": "New result"},
+    ]
+
+    with (
+        patch.object(scraper, "load_proxies", return_value=[]),
+        patch.object(scraper, "run_scrape", return_value=scraped_jobs),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "scrape",
+                "--query",
+                "data scientist",
+                "--location",
+                "Istanbul",
+                "--output",
+                str(output_path),
+                "--no-proxy",
+                *append_arguments,
+            ],
+        )
+
+    written_titles = [json.loads(line)["title"] for line in output_path.read_text().splitlines()]
+    assert result.exit_code == 0, plain(result.output)
+    assert written_titles == expected_titles
+
+
 def test_scrape_interactive_binds_every_option():
     """Regression: the old no-args branch never bound no_proxy/hours_old/
     specific_proxy, so it raised UnboundLocalError before scraping."""
@@ -89,7 +131,7 @@ def test_scrape_interactive_binds_every_option():
     with patch.object(scraper, "load_proxies", return_value=[]), \
          patch.object(scraper, "read_existing_jobs", return_value=set()), \
          patch.object(scraper, "run_scrape", return_value=[]), \
-         patch.object(scraper, "append_jobs_jsonl", return_value=0):
+         patch.object(scraper, "write_jobs_jsonl", return_value=0):
         scraper.run_cli(**options)
 
 
