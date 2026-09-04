@@ -253,6 +253,9 @@ uv run job analyze --jobs jobs.jsonl --limit 5
 | `--chat-id` | `TELEGRAM_CHAT_ID` | Telegram chat ID (required) |
 | `--retries` | `3` | Max retries per job on Gemini failure |
 
+The analyzer exits with status `1` when every attempted job fails. It exits with status `0` for full success, partial
+success, or when there are no jobs to process; partial failures remain recorded in the output JSONL and daily summary.
+
 ### Daily Runner
 
 Combines scraper + analyzer in sequence with proxy validation and retry support:
