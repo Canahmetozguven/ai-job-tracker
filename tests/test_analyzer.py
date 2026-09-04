@@ -1,14 +1,17 @@
 import json
 import copy
+import datetime
+import os
+import time
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
 import pytest
-from ai_job_tracker import run_daily
+from ai_job_tracker import analyzer as analyzer_module, run_daily
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs, count_jobs
-from ai_job_tracker.analyzer import get_seen_urls
+from ai_job_tracker.analyzer import filter_recent_jobs, get_seen_urls
 from ai_job_tracker.analysis_validation import is_valid_analysis
 from ai_job_tracker.gemini_client import build_prompt, resolve_browser_executable
 from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
@@ -262,6 +265,82 @@ def test_get_seen_urls_only_includes_successful_analysis_records(tmp_path):
     )
 
     assert get_seen_urls(str(results)) == {"https://success.example/job-1"}
+
+
+def test_filter_recent_jobs_excludes_old_utc_timestamp():
+    current_time = datetime.datetime.now(datetime.UTC)
+    old_job = {
+        "job_url": "https://old.example/job",
+        "date_posted": (current_time - datetime.timedelta(hours=25)).isoformat().replace("+00:00", "Z"),
+    }
+
+    filtered_jobs = filter_recent_jobs([old_job], hours=24)
+
+    assert filtered_jobs == []
+
+
+@pytest.mark.parametrize(
+    ("date_posted", "expected_url"),
+    [
+        ("2026-09-03T12:00:00Z", "https://boundary-z.example/job"),
+        ("2026-09-03T15:00:00+03:00", "https://boundary-offset.example/job"),
+        ("2026-09-03T12:00:00", "https://boundary-naive.example/job"),
+        ("2026-09-03T11:59:59+00:00", None),
+    ],
+)
+def test_filter_recent_jobs_normalizes_supported_timestamp_forms(mocker, date_posted, expected_url):
+    fixed_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+    datetime_mock = mocker.patch.object(analyzer_module, "datetime")
+    datetime_mock.now.return_value = fixed_time
+    datetime_mock.fromisoformat.side_effect = datetime.datetime.fromisoformat
+    job = {"job_url": expected_url or "https://old.example/job", "date_posted": date_posted}
+
+    filtered_jobs = filter_recent_jobs([job], hours=24)
+
+    assert [filtered_job["job_url"] for filtered_job in filtered_jobs] == ([expected_url] if expected_url else [])
+
+
+def test_filter_recent_jobs_applies_documented_invalid_timestamp_policy(mocker):
+    fixed_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+    datetime_mock = mocker.patch.object(analyzer_module, "datetime")
+    datetime_mock.now.return_value = fixed_time
+    datetime_mock.fromisoformat.side_effect = datetime.datetime.fromisoformat
+    malformed_job = {"job_url": "https://malformed.example/job", "date_posted": "not-a-date"}
+    missing_date_job = {"job_url": "https://missing.example/job", "date_posted": None}
+
+    filtered_jobs = filter_recent_jobs([malformed_job, missing_date_job], hours=24)
+
+    assert filtered_jobs == [malformed_job]
+
+
+@pytest.mark.parametrize("timezone_name", ["UTC", "Europe/Istanbul"])
+def test_filter_recent_jobs_is_independent_of_local_timezone(monkeypatch, timezone_name):
+    if not hasattr(time, "tzset"):
+        pytest.skip("time.tzset() is unavailable on this platform")
+
+    original_timezone = os.environ.get("TZ")
+    monkeypatch.setenv("TZ", timezone_name)
+    time.tzset()
+    try:
+        current_time = datetime.datetime.now(datetime.UTC)
+        recent_job = {
+            "job_url": "https://recent.example/job",
+            "date_posted": (current_time - datetime.timedelta(hours=1)).isoformat(),
+        }
+        old_job = {
+            "job_url": "https://old.example/job",
+            "date_posted": (current_time - datetime.timedelta(hours=25)).isoformat(),
+        }
+
+        filtered_jobs = filter_recent_jobs([recent_job, old_job], hours=24)
+
+        assert filtered_jobs == [recent_job]
+    finally:
+        if original_timezone is None:
+            monkeypatch.delenv("TZ", raising=False)
+        else:
+            monkeypatch.setenv("TZ", original_timezone)
+        time.tzset()
 
 
 def test_is_valid_analysis_requires_score_and_recommendation():
