@@ -246,22 +246,27 @@ def test_daily_threads_configured_analysis_output_through_accounting(monkeypatch
     """
     monkeypatch.setattr(run_daily.settings, "analysis_output_file", "custom_results.jsonl")
 
-    argvs = []
+    command_calls = []
     counted, read = [], []
 
     monkeypatch.setattr(run_daily, "validate_proxies", lambda: ["1.2.3.4:8080"])
     monkeypatch.setattr(run_daily, "print_summary", lambda **_: None)
     monkeypatch.setattr(run_daily, "_update_pass_summary", lambda *a, **k: None)
-    monkeypatch.setattr(run_daily, "run_command", lambda cmd, desc, **k: argvs.append(cmd) or True)
+    monkeypatch.setattr(
+        run_daily,
+        "run_command",
+        lambda cmd, desc, **kwargs: command_calls.append((cmd, kwargs)) or True,
+    )
     monkeypatch.setattr(run_daily, "count_jsonl_lines", lambda p: counted.append(p) or 0)
     monkeypatch.setattr(run_daily, "read_jsonl_records", lambda p, n: read.append(p) or [])
     monkeypatch.setattr(run_daily, "summarize_analysis_results", lambda records, ok: {})
 
     run_daily.run("chat-123")
 
-    analyze_argv = next(a for a in argvs if "analyze" in a)
+    analyze_argv, analyze_kwargs = next(call for call in command_calls if "analyze" in call[0])
     assert "--output" in analyze_argv
     assert analyze_argv[analyze_argv.index("--output") + 1] == "custom_results.jsonl"
+    assert analyze_kwargs["retries"] == 1
     assert counted == ["custom_results.jsonl"]
     assert read == ["custom_results.jsonl"]
 
