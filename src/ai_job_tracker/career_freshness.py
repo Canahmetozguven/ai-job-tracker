@@ -42,8 +42,10 @@ def _parse_calendar_date(date_text: str) -> datetime.date | None:
         return None
 
 
-def _parse_latest_posted_at(date_posted: object) -> datetime.datetime | None:
-    """Return the latest instant represented by a supported posting date."""
+def _parse_posting_interval(
+    date_posted: object,
+) -> tuple[datetime.datetime, datetime.datetime] | None:
+    """Return the UTC interval represented by a supported posting date."""
     if not isinstance(date_posted, str):
         return None
 
@@ -53,7 +55,9 @@ def _parse_latest_posted_at(date_posted: object) -> datetime.datetime | None:
 
     calendar_date = _parse_calendar_date(normalized_date)
     if calendar_date is not None:
-        return datetime.datetime.combine(calendar_date, datetime.time.max, tzinfo=datetime.UTC)
+        day_start = datetime.datetime.combine(calendar_date, datetime.time.min, tzinfo=datetime.UTC)
+        day_end = datetime.datetime.combine(calendar_date, datetime.time.max, tzinfo=datetime.UTC)
+        return day_start, day_end
 
     try:
         posted_at = datetime.datetime.fromisoformat(normalized_date.replace("Z", "+00:00"))
@@ -61,8 +65,10 @@ def _parse_latest_posted_at(date_posted: object) -> datetime.datetime | None:
         return None
 
     if posted_at.tzinfo is None:
-        return posted_at.replace(tzinfo=datetime.UTC)
-    return posted_at.astimezone(datetime.UTC)
+        posted_at = posted_at.replace(tzinfo=datetime.UTC)
+    else:
+        posted_at = posted_at.astimezone(datetime.UTC)
+    return posted_at, posted_at
 
 
 def filter_recent_jobs(
@@ -92,6 +98,6 @@ def filter_recent_jobs(
     return [
         job
         for job in jobs
-        if (posted_at := _parse_latest_posted_at(job.get("date_posted"))) is None
-        or posted_at >= cutoff_time
+        if (posting_interval := _parse_posting_interval(job.get("date_posted"))) is None
+        or (posting_interval[1] >= cutoff_time and posting_interval[0] <= reference_time)
     ]

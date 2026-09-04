@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import time
 import urllib.error
 import urllib.request
@@ -35,7 +36,14 @@ class BaseCareerScraper:
         """Override in subclass. Return records matching the common record schema."""
         raise NotImplementedError
 
-    def fetch_recent_jobs(self, query: str, limit: int = 50, hours: int = 0) -> list[dict]:
+    def fetch_recent_jobs(
+        self,
+        query: str,
+        limit: int = 50,
+        hours: int = 0,
+        *,
+        current_time: datetime.datetime | None = None,
+    ) -> list[dict]:
         """Fetch jobs with upstream freshness handling when a source supports it."""
         return self.fetch_jobs(query, limit=limit)
 

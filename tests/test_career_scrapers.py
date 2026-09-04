@@ -1,5 +1,6 @@
 """Unit tests for career_scrapers package."""
 
+import datetime
 import json
 import time
 import urllib.error
@@ -292,7 +293,7 @@ def test_amazon_freshness_fetch_paginates_past_old_results():
     recent_job = {
         "title": "Recent role",
         "job_path": "/en/jobs/recent",
-        "posted_date": "Dec 31, 2999",
+        "posted_date": "Sep 4, 2026",
     }
     responses = [
         json.dumps({"hits": 51, "jobs": old_jobs}).encode(),
@@ -301,11 +302,50 @@ def test_amazon_freshness_fetch_paginates_past_old_results():
     scraper = AmazonScraper()
     scraper._get = MagicMock(side_effect=responses)
 
-    records = scraper.fetch_recent_jobs("data scientist", limit=1, hours=24)
+    current_time = datetime.datetime(2026, 9, 4, 12, tzinfo=datetime.UTC)
+
+    records = scraper.fetch_recent_jobs("data scientist", limit=1, hours=24, current_time=current_time)
 
     assert [record["title"] for record in records] == ["Recent role"]
     assert "offset=0" in scraper._get.call_args_list[0].args[0]
     assert "offset=50" in scraper._get.call_args_list[1].args[0]
+
+
+def test_amazon_freshness_fetch_reuses_reference_time_across_pages(monkeypatch):
+    reference_times = iter(
+        [
+            datetime.datetime(2026, 9, 5, 0, 30, tzinfo=datetime.UTC),
+            datetime.datetime(2026, 9, 5, 1, 30, tzinfo=datetime.UTC),
+        ]
+    )
+
+    class AdvancingDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return next(reference_times)
+
+    old_job = {
+        "title": "Old role",
+        "job_path": "/en/jobs/old",
+        "posted_date": "Jan 1, 2000",
+    }
+    boundary_job = {
+        "title": "Boundary role",
+        "job_path": "/en/jobs/boundary",
+        "posted_date": "Sep 4, 2026",
+    }
+    responses = [
+        json.dumps({"hits": 2, "jobs": [old_job]}).encode(),
+        json.dumps({"hits": 2, "jobs": [boundary_job]}).encode(),
+    ]
+    scraper = AmazonScraper()
+    scraper.PAGE_SIZE = 1
+    scraper._get = MagicMock(side_effect=responses)
+    monkeypatch.setattr("ai_job_tracker.career_scrapers.amazon.datetime.datetime", AdvancingDatetime)
+
+    records = scraper.fetch_recent_jobs("data scientist", limit=1, hours=1)
+
+    assert [record["title"] for record in records] == ["Boundary role"]
 
 
 # --- Stub scrapers (tier-2 and tier-3) ---

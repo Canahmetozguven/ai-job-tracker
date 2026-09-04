@@ -70,6 +70,9 @@ def test_career_requires_query():
         ("Sep 3, 2026", True),
         ("2026-09-04", True),
         ("Sep  4, 2026", True),
+        ("2026-09-04T12:00:01Z", False),
+        ("2026-09-05", False),
+        ("Sep 5, 2026", False),
         ("2026-09-03T11:59:59Z", False),
         ("Sep  2, 2026", False),
         ("unknown", True),
@@ -137,6 +140,35 @@ def test_career_command_filters_old_jobs_using_hours(tmp_path):
     written_urls = [json.loads(line)["job_url"] for line in output_path.read_text().splitlines()]
     assert result.exit_code == 0, plain(result.output)
     assert written_urls == ["https://example.com/unknown"]
+
+
+def test_career_run_uses_one_reference_time_for_all_freshness_filters(tmp_path):
+    reference_times = []
+    boundary_job = {
+        "job_url": "https://example.com/boundary",
+        "date_posted": "Sep 4, 2026",
+    }
+
+    class ReferenceAwareScraper(AmazonScraperMock):
+        def fetch_recent_jobs(self, query, limit=50, hours=0, *, current_time=None):
+            reference_times.append(current_time)
+            return cs.filter_recent_jobs([boundary_job], hours, current_time=current_time)
+
+    current_time = datetime.datetime(2026, 9, 5, 0, 30, tzinfo=datetime.UTC)
+    output_path = tmp_path / "jobs.jsonl"
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": ReferenceAwareScraper}):
+        exit_code = cs.run(
+            query="data scientist",
+            hours=1,
+            output=str(output_path),
+            current_time=current_time,
+        )
+
+    written_urls = [json.loads(line)["job_url"] for line in output_path.read_text().splitlines()]
+    assert exit_code == 0
+    assert reference_times == [current_time]
+    assert written_urls == ["https://example.com/boundary"]
 
 
 def test_cli_invokes_each_registered_scraper(tmp_path):

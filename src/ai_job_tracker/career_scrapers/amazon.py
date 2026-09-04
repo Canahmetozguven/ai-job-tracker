@@ -15,6 +15,7 @@ Records with missing title or job_path are skipped — they cannot produce
 a usable record and would otherwise pollute the JSONL with homepage URLs.
 """
 
+import datetime
 import json
 from urllib.parse import urlencode
 
@@ -67,13 +68,21 @@ class AmazonScraper(BaseCareerScraper):
         page = self._fetch_page(query, limit, offset=0)
         return self._parse_jobs(page.get("jobs", []))
 
-    def fetch_recent_jobs(self, query: str, limit: int = 50, hours: int = 0) -> list[dict]:
+    def fetch_recent_jobs(
+        self,
+        query: str,
+        limit: int = 50,
+        hours: int = 0,
+        *,
+        current_time: datetime.datetime | None = None,
+    ) -> list[dict]:
         """Page through score-sorted results until enough recent jobs are found."""
         if hours <= 0:
             return self.fetch_jobs(query, limit=limit)
         if limit <= 0:
             return []
 
+        reference_time = current_time or datetime.datetime.now(datetime.UTC)
         recent_records = []
         offset = 0
         page_size = self.PAGE_SIZE
@@ -81,7 +90,9 @@ class AmazonScraper(BaseCareerScraper):
         while len(recent_records) < limit:
             page = self._fetch_page(query, page_size, offset)
             jobs = page.get("jobs", [])
-            recent_records.extend(filter_recent_jobs(self._parse_jobs(jobs), hours))
+            recent_records.extend(
+                filter_recent_jobs(self._parse_jobs(jobs), hours, current_time=reference_time)
+            )
             offset += len(jobs)
 
             total_hits = page.get("hits")
