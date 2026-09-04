@@ -343,6 +343,8 @@ def run(chat_id: str):
         run_summary["errors"].append("Analysis failed")
 
     print_summary(chat_id=chat_id)
+    if not analyze_ok:
+        sys.exit(1)
     print("\nDone!")
 
 if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI

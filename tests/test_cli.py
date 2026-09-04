@@ -294,8 +294,10 @@ def test_daily_reports_failed_analyzer_exit_with_persisted_error_records(monkeyp
     monkeypatch.setattr(run_daily, "read_jsonl_records", lambda _path, _start: [error_record])
 
     try:
-        run_daily.run("chat-id")
+        with pytest.raises(SystemExit) as exit_info:
+            run_daily.run("chat-id")
 
+        assert exit_info.value.code == 1
         assert run_daily.run_summary["analyze"] == {
             "processed": 1,
             "succeeded": 0,
