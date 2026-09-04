@@ -272,8 +272,9 @@ The daily runner:
 1. **Validates proxies** - Tests `proxies/proxyscrape_raw.txt` and saves working ones
 2. **Pass 1 (Turkey local)** - Scrapes "data scientist" with `country=turkey` and `location=Turkey` into `jobs_linkedin.jsonl`
 3. **Pass 2 (Big Tech 7)** - Scrapes "data scientist" globally and post-filters to Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla — appends to the same JSONL
-4. **Analyzes** - Sends each new job to Gemini AI for scoring
-5. **Reports** - Prints summary + sends to Telegram (per-pass counts visible)
+4. **Pass 3 (career sites)** - Scrapes the Big Tech career sites directly and keeps postings from the last seven days; postings without a reliable date are retained
+5. **Analyzes** - Sends each new job to Gemini AI for scoring
+6. **Reports** - Prints summary + sends to Telegram (per-pass counts visible)
 
 ### Proxy Scraper
 
