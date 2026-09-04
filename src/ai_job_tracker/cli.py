@@ -115,7 +115,7 @@ def analyze(
     # defaults of None mean "not given on the command line".
     token, resolved_chat_id = _require_telegram(chat_id or settings.telegram_chat_id)
 
-    asyncio.run(
+    exit_code = asyncio.run(
         run_analysis(
             profile_path=profile or settings.profile_file,
             jobs_path=jobs or settings.jobs_input_file,
@@ -130,6 +130,8 @@ def analyze(
             retries=retries,
         )
     )
+    if exit_code != 0:
+        raise typer.Exit(exit_code)
 
 
 @app.command()
