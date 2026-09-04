@@ -2,13 +2,13 @@
 
 import tomllib
 from importlib import import_module
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import typer
 from typer.testing import CliRunner
 
-from ai_job_tracker import proxy_scraper, run_daily, scraper, validate_proxies
+from ai_job_tracker import analyzer, cli as cli_module, proxy_scraper, run_daily, scraper, validate_proxies
 from ai_job_tracker.cli import app
 
 from conftest import CLI_ENV, plain
@@ -101,6 +101,47 @@ def test_analyze_without_telegram_credentials_fails_cleanly(monkeypatch):
 
     assert result.exit_code != 0
     assert "TELEGRAM_BOT_TOKEN" in plain(result.output)
+
+
+def test_analyzer_module_entry_point_selects_analyze_command(monkeypatch):
+    invoked_arguments = []
+    monkeypatch.setattr(cli_module, "app", lambda *, args: invoked_arguments.append(args))
+
+    analyzer.main(["--chat-id", "cli-chat"])
+
+    assert invoked_arguments == [["analyze", "--chat-id", "cli-chat"]]
+
+
+def test_analyze_cli_chat_id_overrides_configured_destination(monkeypatch):
+    monkeypatch.setattr(cli_module.settings, "telegram_bot_token", "token")
+    monkeypatch.setattr(cli_module.settings, "telegram_chat_id", "configured-chat")
+
+    with patch.object(cli_module, "run_analysis", new_callable=AsyncMock) as run_analysis:
+        result = runner.invoke(app, ["analyze", "--chat-id", "cli-chat"])
+
+    assert result.exit_code == 0, plain(result.output)
+    assert run_analysis.await_args.kwargs["chat_id"] == "cli-chat"
+
+
+def test_analyze_uses_configured_chat_id_when_cli_option_is_absent(monkeypatch):
+    monkeypatch.setattr(cli_module.settings, "telegram_bot_token", "token")
+    monkeypatch.setattr(cli_module.settings, "telegram_chat_id", "configured-chat")
+
+    with patch.object(cli_module, "run_analysis", new_callable=AsyncMock) as run_analysis:
+        result = runner.invoke(app, ["analyze"])
+
+    assert result.exit_code == 0, plain(result.output)
+    assert run_analysis.await_args.kwargs["chat_id"] == "configured-chat"
+
+
+def test_analyze_missing_destination_names_both_configuration_paths(monkeypatch):
+    monkeypatch.setattr(cli_module.settings, "telegram_bot_token", "token")
+    monkeypatch.setattr(cli_module.settings, "telegram_chat_id", None)
+
+    result = runner.invoke(app, ["analyze"])
+
+    assert result.exit_code != 0
+    assert "TELEGRAM_CHAT_ID (or --chat-id)" in plain(result.output)
 
 
 def test_daily_without_telegram_credentials_fails_cleanly(monkeypatch):

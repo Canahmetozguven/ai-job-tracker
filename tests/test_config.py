@@ -97,6 +97,7 @@ def test_settings_read_from_env_file(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
         "TELEGRAM_BOT_TOKEN=file-token\n"
+        "TELEGRAM_CHAT_ID=file-chat\n"
         "PROFILE_FILE=cv.txt\n"
         "GEMINI_URL=https://example.test/app\n"
     )
@@ -104,6 +105,7 @@ def test_settings_read_from_env_file(tmp_path):
     loaded = Settings(_env_file=env_file)
 
     assert loaded.telegram_bot_token == "file-token"
+    assert loaded.telegram_chat_id == "file-chat"
     assert loaded.profile_file == "cv.txt"
     assert loaded.gemini_url == "https://example.test/app"
 
