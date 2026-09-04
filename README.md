@@ -177,7 +177,7 @@ Everything runs through one command. `job --help` lists the subcommands, and
 | `job scrape` | Scrape jobs from JobSpy/LinkedIn |
 | `job analyze` | Score jobs with Gemini and notify Telegram |
 | `job daily` | Full pipeline: proxies, three scrape passes, analysis |
-| `job career` | Scrape the Big Tech 7 career sites directly |
+| `job career` | Scrape Amazon Careers; report unavailable Big Tech sources |
 | `job proxies` | Fetch free proxies from public sources |
 | `job validate-proxies` | Test a proxy list, keep the working ones |
 
@@ -227,6 +227,13 @@ to its documented default.
 | `--append`, `-a` | off | Append to the output file instead of overwriting |
 | `--interactive`, `-I` | off | Prompt for every option instead of reading flags |
 
+### Career Sites
+
+`job career --query "data scientist"` currently fetches jobs from Amazon's
+public careers API. Apple, Google, Meta, Microsoft, Nvidia, and Tesla remain in
+the source summary as explicitly unsupported; they are not queried or reported
+as successful empty searches.
+
 ### Analyzer
 
 ```bash
@@ -272,8 +279,9 @@ The daily runner:
 1. **Validates proxies** - Tests `proxies/proxyscrape_raw.txt` and saves working ones
 2. **Pass 1 (Turkey local)** - Scrapes "data scientist" with `country=turkey` and `location=Turkey` into `jobs_linkedin.jsonl`
 3. **Pass 2 (Big Tech 7)** - Scrapes "data scientist" globally and post-filters to Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla — appends to the same JSONL
-4. **Analyzes** - Sends each new job to Gemini AI for scoring
-5. **Reports** - Prints summary + sends to Telegram (per-pass counts visible)
+4. **Pass 3 (Amazon Careers)** - Scrapes Amazon's public career-site API; the other six career sources are reported as unsupported
+5. **Analyzes** - Sends each new job to Gemini AI for scoring
+6. **Reports** - Prints summary + sends to Telegram (per-pass counts visible)
 
 ### Proxy Scraper
 

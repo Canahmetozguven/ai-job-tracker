@@ -21,6 +21,16 @@ def test_registry_contains_amazon():
     assert SCRAPERS["Amazon"] is AmazonScraper
 
 
+def test_registry_marks_only_amazon_operational():
+    operational_sources = {
+        source_name
+        for source_name, scraper_class in SCRAPERS.items()
+        if scraper_class.operational
+    }
+
+    assert operational_sources == {"Amazon"}
+
+
 # --- BaseCareerScraper init ---
 
 

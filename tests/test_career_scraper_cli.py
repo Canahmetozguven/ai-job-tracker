@@ -18,6 +18,7 @@ from ai_job_tracker.cli import app
 class AmazonScraperMock(BaseCareerScraper):
     name = "Amazon"
     base_url = "https://amazon.jobs"
+    operational = True
 
     def fetch_jobs(self, query, limit=50):
         return []
@@ -26,9 +27,19 @@ class AmazonScraperMock(BaseCareerScraper):
 class AppleScraperMock(BaseCareerScraper):
     name = "Apple"
     base_url = "https://jobs.apple.com"
+    operational = True
 
     def fetch_jobs(self, query, limit=50):
         return []
+
+
+class UnsupportedScraperMock(BaseCareerScraper):
+    name = "Apple"
+    base_url = "https://jobs.apple.com"
+    operational = False
+
+    def fetch_jobs(self, query, limit=50):
+        raise AssertionError("unsupported scrapers must not be invoked")
 
 
 def test_career_help_shows_expected_flags():
@@ -37,6 +48,7 @@ def test_career_help_shows_expected_flags():
     out = plain(result.output)
     for flag in ["--query", "--limit", "--hours", "--output", "--append", "--no-proxy", "--proxy"]:
         assert flag in out
+    assert "Amazon Careers" in out
 
 
 def test_career_command_propagates_exit_code(tmp_path):
@@ -56,6 +68,32 @@ def test_career_command_propagates_exit_code(tmp_path):
 def test_career_requires_query():
     result = CliRunner(env=CLI_ENV).invoke(app, ["career", "--output", "x.jsonl"])
     assert result.exit_code != 0
+
+
+def test_cli_reports_unsupported_sources_without_invoking_them(tmp_path, capsys):
+    with (
+        patch.dict(
+            cs.SCRAPERS,
+            {"Amazon": AmazonScraperMock, "Apple": UnsupportedScraperMock},
+        ),
+        patch.object(AmazonScraperMock, "fetch_jobs", return_value=[]),
+        patch.object(
+            UnsupportedScraperMock,
+            "fetch_jobs",
+            wraps=UnsupportedScraperMock.fetch_jobs,
+        ) as unsupported_fetch,
+    ):
+        exit_code = cs.run(
+            query="data scientist",
+            output=str(tmp_path / "jobs.jsonl"),
+            append=True,
+        )
+
+    summary_output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "Amazon: 0 job(s)" in summary_output
+    assert "Apple: unsupported" in summary_output
+    unsupported_fetch.assert_not_called()
 
 
 def test_cli_invokes_each_registered_scraper(tmp_path):
