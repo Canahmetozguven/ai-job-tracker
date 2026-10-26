@@ -11,10 +11,13 @@ Exit codes:
 
 from __future__ import annotations
 
-import os
-
 from ai_job_tracker.career_scrapers import SCRAPERS, BaseCareerScraper
-from ai_job_tracker.scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
+from ai_job_tracker.scraper import (
+    append_jobs_jsonl,
+    deduplicate_jobs,
+    read_existing_jobs,
+    write_jobs_jsonl,
+)
 
 
 def _print_per_scraper_summary(results: dict, errors: dict) -> None:
@@ -45,7 +48,7 @@ def run(
     proxy = None if no_proxy else proxy
 
     existing_urls: set[str] = set()
-    if append and os.path.exists(output):
+    if append:
         existing_urls = read_existing_jobs(output)
         print(f"Loaded {len(existing_urls)} existing job URLs from {output}")
 
@@ -70,6 +73,8 @@ def run(
     all_records = deduplicate_jobs(all_records)
 
     if not all_records:
+        if not append:
+            write_jobs_jsonl([], output)
         # No records contributed by any scraper — either every scraper raised
         # an exception, or every scraper returned [] (or a mix of both).
         # Per spec, exit 1 in either case.
@@ -79,7 +84,10 @@ def run(
         print(f"\nNo records from any scraper ({n_errored} errors, {n_empty} empty). Exiting 1.")
         return 1
 
-    new_count = append_jobs_jsonl(all_records, output, existing_urls)
+    if append:
+        new_count = append_jobs_jsonl(all_records, output, existing_urls)
+    else:
+        new_count = write_jobs_jsonl(all_records, output)
     print(f"\nWrote {new_count} new job(s) to {output}")
     return 0
 

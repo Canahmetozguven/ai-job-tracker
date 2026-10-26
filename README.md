@@ -227,6 +227,9 @@ to its documented default.
 | `--append`, `-a` | off | Append to the output file instead of overwriting |
 | `--interactive`, `-I` | off | Prompt for every option instead of reading flags |
 
+The `scrape` and `career` commands replace an existing output file by default. Pass `--append` to preserve existing
+records and add only jobs whose URLs are not already present.
+
 ### Analyzer
 
 ```bash

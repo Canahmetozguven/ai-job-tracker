@@ -7,9 +7,10 @@ import math
 import os
 import random
 import time
-from ai_job_tracker.config import match_big_tech
+import typing
 from datetime import datetime
-from typing import Optional
+
+from ai_job_tracker.config import match_big_tech
 
 try:
     from jobspy import scrape_jobs
@@ -236,10 +237,14 @@ def read_existing_jobs(output_path: str) -> set:
                     continue
     return seen
 
-def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set):
-    """Append new jobs to JSON Lines file, skipping duplicates."""
+def _write_new_jobs_jsonl(
+    jobs: list[dict],
+    output_path: str,
+    existing_urls: set[str],
+    file_mode: typing.Literal["a", "w"],
+) -> int:
     count = 0
-    with open(output_path, "a") as f:
+    with open(output_path, file_mode) as f:
         for job in jobs:
             url = job.get("job_url")
             if url and url not in existing_urls:
@@ -247,6 +252,17 @@ def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set):
                 existing_urls.add(url)
                 count += 1
     return count
+
+
+def write_jobs_jsonl(jobs: list[dict], output_path: str) -> int:
+    """Replace a JSON Lines file with the supplied deduplicated jobs."""
+    return _write_new_jobs_jsonl(jobs, output_path, set(), "w")
+
+
+def append_jobs_jsonl(jobs: list[dict], output_path: str, existing_urls: set[str]) -> int:
+    """Append new jobs to a JSON Lines file, skipping existing URLs."""
+    return _write_new_jobs_jsonl(jobs, output_path, existing_urls, "a")
+
 
 async def run_scrape(config: dict, proxy: str = None):
     """Run a single scrape cycle. Uses hours_old filter to get fresh jobs."""
@@ -281,7 +297,8 @@ async def run_daemon(config: dict, proxy: str = None):
 
     count_total = 0
     count_all = 0
-    existing_urls = read_existing_jobs(config["output"])
+    append_mode = bool(config.get("append_mode", False))
+    existing_urls = read_existing_jobs(config["output"]) if append_mode else set()
 
     while True:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -295,7 +312,12 @@ async def run_daemon(config: dict, proxy: str = None):
             before = len(jobs)
             jobs = filter_big_tech(jobs)
             print(f"  big_tech filter kept {len(jobs)} of {before} records")
-        new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        if append_mode:
+            new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        else:
+            new_count = write_jobs_jsonl(jobs, config["output"])
+            existing_urls = read_existing_jobs(config["output"])
+            append_mode = True
         count_total += new_count
         count_all += len(jobs)
         print(f"[{timestamp}] Cycle complete: {new_count} new ({len(jobs)} total), {count_total} cumulative")
@@ -407,24 +429,25 @@ def run_cli(
         "country": country,
         "source_pass": "big_tech_global" if big_tech else "turkey_local",
         "big_tech": big_tech,
+        "append_mode": append_mode,
     }
-
-    if append_mode and os.path.exists(output):
-        existing = read_existing_jobs(output)
-        print(f"Resuming with {len(existing)} existing jobs loaded")
 
     if daemon:
         asyncio.run(run_daemon(config, run_proxy))
         return
 
-    async def run_once():
-        existing_urls = read_existing_jobs(config["output"])
+    async def run_once() -> None:
         jobs = await run_scrape(config, run_proxy)
         if config.get("big_tech"):
             before = len(jobs)
             jobs = filter_big_tech(jobs)
             print(f"  big_tech filter kept {len(jobs)} of {before} records")
-        new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        if append_mode:
+            existing_urls = read_existing_jobs(config["output"])
+            print(f"Resuming with {len(existing_urls)} existing jobs loaded")
+            new_count = append_jobs_jsonl(jobs, config["output"], existing_urls)
+        else:
+            new_count = write_jobs_jsonl(jobs, config["output"])
         print(f"Wrote {new_count} new jobs to {config['output']}")
 
     asyncio.run(run_once())

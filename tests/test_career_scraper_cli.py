@@ -58,6 +58,44 @@ def test_career_requires_query():
     assert result.exit_code != 0
 
 
+@pytest.mark.parametrize(
+    ("append_arguments", "expected_titles"),
+    [
+        ([], ["Fresh result", "New result"]),
+        (["--append"], ["Stored result", "New result"]),
+    ],
+)
+def test_career_output_mode_matches_append_flag(tmp_path, append_arguments, expected_titles):
+    output_path = tmp_path / "jobs-career.jsonl"
+    output_path.write_text(
+        json.dumps({"job_url": "https://existing.example/job", "title": "Stored result"}) + "\n"
+    )
+    fetched_records = [
+        {"job_url": "https://existing.example/job", "title": "Fresh result"},
+        {"job_url": "https://new.example/job", "title": "New result"},
+    ]
+
+    with (
+        patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock}),
+        patch.object(AmazonScraperMock, "fetch_jobs", return_value=fetched_records),
+    ):
+        result = CliRunner(env=CLI_ENV).invoke(
+            app,
+            [
+                "career",
+                "--query",
+                "data scientist",
+                "--output",
+                str(output_path),
+                *append_arguments,
+            ],
+        )
+
+    written_titles = [json.loads(line)["title"] for line in output_path.read_text().splitlines()]
+    assert result.exit_code == 0, plain(result.output)
+    assert written_titles == expected_titles
+
+
 def test_cli_invokes_each_registered_scraper(tmp_path):
     output = str(tmp_path / "out.jsonl")
 
@@ -143,6 +181,17 @@ def test_cli_exits_1_when_all_scrapers_return_empty(tmp_path):
              patch.object(AppleScraperMock, "fetch_jobs", empty):
             code = cs.run(query="data scientist", output=output, append=True)
     assert code == 1
+
+
+def test_career_without_append_clears_stale_output_when_no_jobs_are_found(tmp_path):
+    output_path = tmp_path / "out.jsonl"
+    output_path.write_text(json.dumps({"job_url": "https://stale.example/job"}) + "\n")
+
+    with patch.dict(cs.SCRAPERS, {"Amazon": AmazonScraperMock}):
+        exit_code = cs.run(query="data scientist", output=str(output_path), append=False)
+
+    assert exit_code == 1
+    assert output_path.read_text() == ""
 
 
 def test_cli_exits_1_when_some_error_and_others_empty(tmp_path):
