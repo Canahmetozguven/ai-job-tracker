@@ -1,32 +1,22 @@
-"""Gemini browser interaction via Playwright."""
+"""Browser automation backend for job analysis via Playwright."""
 
 import os
 from pathlib import Path
 import shutil
-from playwright.async_api import async_playwright, Error as PlaywrightError
 
-from ai_job_tracker.config import PROMPT_TEMPLATE, settings
+from ai_job_tracker.config import settings
 
+BROWSER_FORMAT_SUFFIX = """
+- Keep the response brief and Telegram-friendly.
+- Do not use JSON or extra headings.
 
-COMMON_BROWSER_COMMANDS = [
-    "brave-browser",
-    "brave-browser-stable",
-    "brave-browser-nightly",
-    "brave",
-    "chromium",
-    "chromium-browser",
-    "google-chrome",
-    "google-chrome-stable",
-]
-
+Respond with EXACTLY this format and choose only one recommendation action:
+FIT SCORE: X/10
+WHY GOOD: ...
+WHY BAD: ...
+RECOMMENDATION: <Apply|Review|Skip> — <one short next step>"""
 
 def resolve_browser_executable(explicit_path: str | None = None) -> str | None:
-    """Resolve a browser executable path for Playwright.
-
-    If an explicit command or path is provided, resolve it directly. Otherwise,
-    try common browser commands on PATH. If none are available, return None so
-    Playwright uses its bundled Chromium (recommended for automation).
-    """
     if explicit_path:
         has_path_separator = os.path.sep in explicit_path or (
             os.path.altsep is not None and os.path.altsep in explicit_path
@@ -48,30 +38,20 @@ def resolve_browser_executable(explicit_path: str | None = None) -> str | None:
             f"Configured browser command not found on PATH: {explicit_path}"
         )
 
-    # No explicit browser requested — prefer bundled Chromium (set executable_path
-    # to None so Playwright uses its shipped browser). External browsers like Brave
-    # often lack headless-mode support and are not recommended for automation.
     return None
 
 
 async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: str | None = None) -> str:
-    """Submit prompt to Gemini via browser.
+    try:
+        from playwright.async_api import async_playwright, Error as PlaywrightError
+    except ImportError:
+        raise RuntimeError(
+            "Browser backend requires Playwright. Install: pip install 'ai-job-tracker[browser]'"
+        ) from None
 
-    Args:
-        browser_path: Path to Chrome/Brave profile directory
-        prompt: Prompt text to submit
-        browser_executable: Optional browser executable path or command
-
-    Returns:
-        Gemini response text
-
-    Raises:
-        Exception: If browser interaction fails
-    """
     try:
         executable_path = resolve_browser_executable(browser_executable)
         async with async_playwright() as p:
-            # Launch the selected browser with existing profile
             launch_kwargs = {
                 "user_data_dir": browser_path,
                 "headless": True,
@@ -91,24 +71,17 @@ async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: s
                 await page.goto(settings.gemini_url, wait_until="domcontentloaded")
                 await page.wait_for_timeout(5000)
 
-                # Find input area and fill
                 input_box = page.locator("[role='textbox']").first
                 await input_box.wait_for(timeout=30000)
                 await input_box.fill(prompt)
 
-                # Wait a moment for button to become enabled
                 await page.wait_for_timeout(1000)
 
-                # Click send button - it enables after text is entered
-                # Turkish: 'Mesaj gönder' | English: 'Send message'
                 send_button = page.locator("[aria-label='Mesaj gönder'], [aria-label='Send message']").first
                 await send_button.click()
 
-                # Wait for response
                 await page.wait_for_timeout(20000)
 
-                # Extract response. If the locator fails to find a node, treat
-                # it as "no response" rather than crashing the whole submission.
                 response_elem = page.locator(".response-content")
                 if await response_elem.count() > 0:
                     response = await response_elem.first.text_content()
@@ -120,37 +93,31 @@ async def submit_to_gemini(browser_path: str, prompt: str, browser_executable: s
             finally:
                 await context.close()
 
-    except ImportError as e:
-        raise ImportError("Playwright not installed. Run: uv pip install playwright") from e
     except (PlaywrightError, OSError, TimeoutError) as e:
-        # Playwright/network/browser-level failures: surface as a single typed
-        # exception so the retry loop in analyze_job can decide what to do.
         raise RuntimeError(f"Gemini interaction failed: {e}") from e
 
 
-def _description_to_text(value) -> str:
-    """Coerce a description value to a string suitable for slicing.
+async def analyze_via_browser(prompt: str) -> dict:
+    """Analyze a job posting via the Gemini web UI."""
+    from ai_job_tracker.telegram_notify import parse_gemini_response
 
-    NaN values (floats) from pandas can sneak into job dicts; treat any
-    non-string as missing so we don't crash on `value[:2000]`.
-    """
-    if value is None:
-        return 'N/A'
-    if isinstance(value, str):
-        return value
-    if isinstance(value, float):
-        # NaN is a float and is truthy, so `or 'N/A'` would not save us.
-        return 'N/A'
-    return str(value)
+    if not settings.browser_profile_path:
+        raise RuntimeError(
+            "BROWSER_PROFILE_PATH is required for the browser backend. Set it in .env."
+        )
 
-
-def build_prompt(profile: str, job: dict) -> str:
-    """Build prompt from profile and job data."""
-    return PROMPT_TEMPLATE.format(
-        profile=profile,
-        title=job.get('title', 'N/A') or 'N/A',
-        company=job.get('company', 'N/A') or 'N/A',
-        location=job.get('location', 'N/A') or 'N/A',
-        url=job.get('job_url', 'N/A') or 'N/A',
-        description=_description_to_text(job.get('description'))[:2000]
+    full_prompt = prompt + BROWSER_FORMAT_SUFFIX
+    response = await submit_to_gemini(
+        settings.browser_profile_path,
+        full_prompt,
+        browser_executable=settings.gemini_browser_executable,
     )
+    if not response or response == "No response received":
+        raise RuntimeError("Gemini returned no response")
+
+    from ai_job_tracker.analysis_validation import is_valid_analysis
+
+    result = parse_gemini_response(response)
+    if not is_valid_analysis(result):
+        raise RuntimeError(f"Gemini response unparsable: {response[:200]}")
+    return result

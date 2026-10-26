@@ -1,4 +1,4 @@
-"""Job analyzer with Gemini AI - main script."""
+"""Job analyzer — score jobs against a profile with an LLM."""
 
 import asyncio
 import json
@@ -6,12 +6,11 @@ from datetime import datetime, timedelta
 from ai_job_tracker.config import settings
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs
-from ai_job_tracker.telegram_notify import send_message, format_job_analysis, parse_gemini_response
-from ai_job_tracker.gemini_client import submit_to_gemini, build_prompt
+from ai_job_tracker.telegram_notify import send_message, format_job_analysis
+from ai_job_tracker.llm import analyze_job_posting, build_prompt, get_retry_delay, get_inter_job_delay, parse_score
 from ai_job_tracker.analysis_validation import is_valid_analysis
 
 MAX_RETRIES = 3
-RETRY_DELAY = 30  # seconds
 
 def get_seen_urls(results_file: str) -> set[str]:
     """Get URLs of jobs with successful analysis records only.
@@ -52,15 +51,12 @@ def filter_recent_jobs(jobs: list, hours: int) -> list:
         if not date_str:
             continue
         try:
-            # Try parsing ISO format date
             job_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            # If date has no timezone, assume UTC
             if job_date.tzinfo is None:
                 job_date = job_date.replace(tzinfo=None)
             if job_date >= cutoff:
                 filtered.append(job)
         except (ValueError, TypeError):
-            # If date parsing fails, include the job
             filtered.append(job)
     return filtered
 
@@ -68,66 +64,31 @@ async def analyze_job(
     job: dict,
     profile: str,
     chat_id: str,
-    browser_path: str,
-    max_retries: int = 3,
-    browser_executable: str | None = None,
+    max_retries: int = MAX_RETRIES,
     telegram_token: str | None = settings.telegram_bot_token,
 ) -> dict:
-    """Analyze single job with Gemini and send to Telegram.
-
-    Args:
-        job: Job dict
-        profile: User profile text
-        chat_id: Telegram chat ID
-        browser_path: Path to browser profile
-        max_retries: Number of retry attempts for Gemini failures
-        browser_executable: Optional browser executable path for Gemini
-
-    Returns:
-        Analysis result dict
-    """
+    """Analyze a single job with the configured LLM and send to Telegram."""
     prompt = build_prompt(profile, job)
-    print(f"  Submitting to Gemini...")
-    
-    # Retry loop for Gemini failures
+    print(f"  Submitting to LLM...")
+
+    retry_delay = get_retry_delay()
     last_error = None
     for attempt in range(max_retries):
         try:
-            response = await submit_to_gemini(browser_path, prompt, browser_executable=browser_executable)
-            if response and response != "No response received" and not response.startswith("Gemini şunu dedi:No response"):
-                break
-            last_error = f"Empty response from Gemini (attempt {attempt + 1}/{max_retries})"
+            analysis = await analyze_job_posting(prompt)
+            break
         except Exception as e:
             last_error = str(e)
-        
-        if attempt < max_retries - 1:
-            print(f"  Gemini failed (attempt {attempt + 1}/{max_retries}), retrying in {RETRY_DELAY}s...")
-            await asyncio.sleep(RETRY_DELAY)
+            if attempt < max_retries - 1:
+                print(f"  LLM failed (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
     else:
-        # All retries exhausted
-        raise Exception(f"Gemini failed after {max_retries} attempts: {last_error}")
-    
-    analysis = parse_gemini_response(response)
-    if not is_valid_analysis(analysis):
-        response_excerpt = " ".join(response.split())[:200]
-        raise Exception(
-            "Gemini response missing required analysis fields. "
-            f"Response excerpt: {response_excerpt}"
-        )
+        raise Exception(f"LLM failed after {max_retries} attempts: {last_error}")
 
-    # Only send to Telegram if score >= 6
-    score_str = analysis.get("score", "0/10")
-    try:
-        score_val = int(score_str.split("/")[0])
-    except (ValueError, IndexError):
-        score_val = 0
+    score_val = parse_score(analysis.get("score", "0/10"))
     if score_val < 6:
         print(f"  ⏭ Skipped — score {score_val}/10 below threshold")
-        return {
-            'job': job,
-            'analysis': analysis,
-            'gemini_response': response
-        }
+        return {'job': job, 'analysis': analysis}
 
     message = format_job_analysis(job, analysis)
     print(f"  Sending to Telegram...")
@@ -135,11 +96,7 @@ async def analyze_job(
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required before sending notifications")
     await send_message(chat_id, message, telegram_token)
     print(f"  ✓ Sent to Telegram")
-    return {
-        'job': job,
-        'analysis': analysis,
-        'gemini_response': response
-    }
+    return {'job': job, 'analysis': analysis}
 
 def save_result(result: dict, output_path: str):
     """Save analysis result to jsonl."""
@@ -153,18 +110,12 @@ async def run_analysis(
     output: str,
     chat_id: str,
     telegram_token: str,
-    browser_path: str,
-    browser_executable: str | None = None,
     limit: int = 0,
     hours: int = 0,
     skip_seen: bool = False,
     retries: int = MAX_RETRIES,
 ) -> None:
-    """Analyze jobs with Gemini using fully resolved options.
-
-    Parsing and credential validation live in ai_job_tracker.cli; this takes
-    settled values only, including an already-validated Telegram token.
-    """
+    """Analyze jobs with the configured LLM using fully resolved options."""
     print(f"Loading profile from {profile_path}...")
     profile = load_profile(profile_path)
 
@@ -200,9 +151,7 @@ async def run_analysis(
                 job,
                 profile,
                 chat_id,
-                browser_path,
                 retries,
-                browser_executable,
                 telegram_token,
             )
             save_result(result, output)
@@ -213,8 +162,9 @@ async def run_analysis(
             print(f"  ✗ Error: {e}")
             save_result({'job': job, 'error': str(e)}, output)
 
-        if i < len(jobs) - 1:
-            await asyncio.sleep(8)
+        inter_delay = get_inter_job_delay()
+        if inter_delay and i < len(jobs) - 1:
+            await asyncio.sleep(inter_delay)
 
     print(f"\n{'='*50}")
     print(f"Complete: {success_count} succeeded, {error_count} failed")

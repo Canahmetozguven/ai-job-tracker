@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         run: uv python install
       - name: Install dependencies
-        run: uv sync --locked --dev
+        run: uv sync --locked --dev --extra api --extra browser
       - name: Smoke-check CLI entry points
         run: |
           uv run job --help

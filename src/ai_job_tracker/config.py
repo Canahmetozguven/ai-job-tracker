@@ -6,9 +6,9 @@ environment or a `.env` file. Field names map to their upper-case env var
 surface. Nothing here is hard-coded per-machine.
 """
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,10 +30,16 @@ class Settings(BaseSettings):
     # operators must choose the destination in their environment or on the CLI.
     telegram_chat_id: str | None = None
 
-    # Brave profile holding an authenticated Gemini session.
-    browser_profile_path: str = "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data"
-    # Optional browser executable for Gemini automation; None means Playwright
-    # falls back to common browsers on PATH, then its bundled Chromium.
+    # Which analysis backend to use: "api" (pydantic-ai) or "browser" (Playwright).
+    # Install the matching extra: pip install 'ai-job-tracker[api]' or '[browser]'.
+    analysis_backend: Literal["api", "browser"] = "api"
+
+    # --- API backend settings ---
+    ai_api_key: str | None = None
+    ai_model: str = "google:gemini-2.5-flash"
+
+    # --- Browser backend settings ---
+    browser_profile_path: str = ""
     gemini_browser_executable: str | None = None
     gemini_url: str = "https://gemini.google.com/app"
 
@@ -78,8 +84,6 @@ def require_telegram_credentials(
         raise ValueError(f"Missing required Telegram configuration: {', '.join(missing)}")
     return token.strip(), chat_id.strip()
 
-# Prompt template for Gemini analysis. Not a setting: the selected profile's
-# contents are inserted at runtime, while the template stays constant.
 PROMPT_TEMPLATE = """Analyze this job posting for an actionable shortlist decision.
 
 MY PROFILE:
@@ -97,19 +101,20 @@ Description:
 Guidance:
 - Score fit strictly using evidence from the profile and description only. Do not inflate scores for vague overlap.
 - **Data-role boost:** For any job whose title contains one of the following, you MUST score it 6+/10 even if only loosely or tangentially related. This is a mandatory floor, not a suggestion: data engineer, data analyst, analytics, BI analyst, business analyst, ML engineer, ML ops, AI engineer, LLM engineer, deep learning, NLP engineer, data infrastructure, ETL/data warehouse, data platform, BI engineer.
-- **Data Science priority:** If the job title contains "Data Science" or "Data Scientist", score it 9/10 or 10/10. **Exception:** If hard dealbreakers exist, reduce the score but never go below 6+/10 — this is a mandatory minimum floor. Always flag dealbreakers prominently in WHY BAD.
-- **Strategic Edge:** Flag in WHY GOOD if the role involves HealthTech, behavioral analytics, LLM integration, or international/remote setups where my unique background is an asset.
-- Make WHY GOOD concise: short bullets or phrases explaining why this is worth applying to now.
-- Make WHY BAD concise: include gaps, dealbreakers, mandatory language requirements, visa/relocation hurdles, or missing tech stacks.
-- RECOMMENDATION must be exactly one of Apply, Review, or Skip. Add one short next step after the keyword if possible, like "Apply — tailor resume" or "Review — confirm visa sponsorship".
-- Keep the response brief and Telegram-friendly.
-- Do not use JSON or extra headings.
+- **Data Science priority:** If the job title contains "Data Science" or "Data Scientist", score it 9/10 or 10/10. **Exception:** If hard dealbreakers exist, reduce the score but never go below 6+/10 — this is a mandatory minimum floor. Always flag dealbreakers prominently in why_bad.
+- **Strategic Edge:** Flag in why_good if the role involves HealthTech, behavioral analytics, LLM integration, or international/remote setups where my unique background is an asset.
+- Make why_good concise: short bullets or phrases explaining why this is worth applying to now.
+- Make why_bad concise: include gaps, dealbreakers, mandatory language requirements, visa/relocation hurdles, or missing tech stacks.
+- recommendation must be exactly one of Apply, Review, or Skip. Add one short next step after the keyword if possible, like "Apply — tailor resume" or "Review — confirm visa sponsorship"."""
 
-Respond with EXACTLY this format and choose only one recommendation action:
-FIT SCORE: X/10
-WHY GOOD: ...
-WHY BAD: ...
-RECOMMENDATION: <Apply|Review|Skip> — <one short next step>"""
+class AnalysisResult(BaseModel):
+    score: str = Field(description="Fit score in the format X/10, e.g. '8/10'", pattern=r"^(10|[1-9])/10$")
+    why_good: str = Field(description="Concise reasons why this job is a good fit")
+    why_bad: str = Field(description="Concise reasons why this job is not a good fit")
+    recommendation: str = Field(
+        description="One of 'Apply', 'Review', or 'Skip', optionally followed by a dash and a short next step",
+        pattern=r"^(Apply|Review|Skip)\b",
+    )
 
 
 # Big Tech 7 — top tech companies frequently hiring data scientists globally.

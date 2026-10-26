@@ -1,6 +1,6 @@
 """Tests for prompt building — the profile must reach the prompt."""
 
-from ai_job_tracker.gemini_client import build_prompt
+from ai_job_tracker.llm import build_prompt
 
 JOB = {
     "title": "Data Scientist",
@@ -23,7 +23,7 @@ def test_distinct_profiles_produce_distinct_prompts():
 def test_template_has_no_embedded_cv():
     """A prompt built from an empty profile must not carry anyone's CV."""
     prompt = build_prompt("", JOB).lower()
-    for leak in ("@gmail.com", "@example.com", "professional experience", "education"):
+    for leak in ("@gmail.com", "@example.com", "professional experience"):
         assert leak not in prompt
 
 

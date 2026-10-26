@@ -94,12 +94,6 @@ def analyze(
     profile: str = typer.Option(None, "--profile", help="Profile file path"),
     jobs: str = typer.Option(None, "--jobs", help="Jobs input file"),
     output: str = typer.Option(None, "--output", help="Output file for results"),
-    browser_path: str = typer.Option(None, "--browser-path", help="Browser profile path"),
-    browser_executable: str = typer.Option(
-        None,
-        "--browser-executable",
-        help="Optional browser executable for Gemini; falls back to common browsers or bundled Chromium",
-    ),
     chat_id: str = typer.Option(
         None, "--chat-id", help="Telegram destination (defaults to TELEGRAM_CHAT_ID)"
     ),
@@ -108,11 +102,9 @@ def analyze(
     skip_seen: bool = typer.Option(
         False, "--skip-seen", help="Skip jobs with successful analysis already recorded"
     ),
-    retries: int = typer.Option(MAX_RETRIES, "--retries", help="Max retries per job on Gemini failure"),
+    retries: int = typer.Option(MAX_RETRIES, "--retries", help="Max retries per job on LLM failure"),
 ) -> None:
-    """Score scraped jobs against your profile with Gemini and notify Telegram."""
-    # Settings supply the defaults so `.env` stays the single source; Typer
-    # defaults of None mean "not given on the command line".
+    """Score scraped jobs against your profile with AI and notify Telegram."""
     token, resolved_chat_id = _require_telegram(chat_id or settings.telegram_chat_id)
 
     asyncio.run(
@@ -122,8 +114,6 @@ def analyze(
             output=output or settings.analysis_output_file,
             chat_id=resolved_chat_id,
             telegram_token=token,
-            browser_path=browser_path or settings.browser_profile_path,
-            browser_executable=browser_executable or settings.gemini_browser_executable,
             limit=limit,
             hours=hours,
             skip_seen=skip_seen,

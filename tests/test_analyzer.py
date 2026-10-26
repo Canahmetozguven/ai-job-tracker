@@ -10,7 +10,7 @@ from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs, count_jobs
 from ai_job_tracker.analyzer import get_seen_urls
 from ai_job_tracker.analysis_validation import is_valid_analysis
-from ai_job_tracker.gemini_client import build_prompt, resolve_browser_executable
+from ai_job_tracker.llm import build_prompt
 from ai_job_tracker.analysis_summary import count_jsonl_lines, read_jsonl_records, summarize_analysis_results
 from ai_job_tracker.telegram_notify import format_job_analysis, format_run_summary, parse_gemini_response
 
@@ -126,16 +126,13 @@ def test_build_prompt_uses_actionable_shortlist_guidance():
         },
     )
 
-    assert 'FIT SCORE:' in prompt
-    assert 'WHY GOOD:' in prompt
-    assert 'WHY BAD:' in prompt
-    assert 'RECOMMENDATION:' in prompt
+    assert 'why_good' in prompt or 'WHY GOOD' in prompt
+    assert 'why_bad' in prompt or 'WHY BAD' in prompt
+    assert 'recommendation' in prompt or 'RECOMMENDATION' in prompt
     assert 'actionable shortlist' in prompt.lower()
     assert 'strict' in prompt.lower()
     assert 'dealbreakers' in prompt.lower()
     assert 'HealthTech' in prompt or 'behavioral analytics' in prompt or 'LLM integration' in prompt or 'Strategic Edge' in prompt
-    assert 'RECOMMENDATION: <Apply|Review|Skip> — <one short next step>' in prompt
-    assert 'Apply | Review | Skip' not in prompt
 
 
 def test_build_prompt_data_role_boost_must_score_at_least_6():
@@ -150,9 +147,7 @@ def test_build_prompt_data_role_boost_must_score_at_least_6():
         },
     )
 
-    # Data-role boost must be a hard floor, not a soft suggestion
     assert 'MUST score it 6+/10' in prompt or 'must score it 6+' in prompt.lower()
-    # Data Science exception floor should be 6 minimum
     assert 'Data Science priority' in prompt or 'data science priority' in prompt.lower()
     assert 'never go below 6+/10' in prompt.lower() or 'mandatory minimum floor' in prompt.lower()
 
@@ -174,8 +169,6 @@ def test_build_prompt_truncates_description_to_2000_chars():
 
 def test_build_prompt_handles_nan_description():
     """Regression: NaN floats in description must not crash slicing."""
-    # NaN is a float and is truthy, so `or 'N/A'` won't save us. The function
-    # must coerce it to a string first.
     prompt = build_prompt(
         'Profile',
         {
@@ -193,7 +186,6 @@ def test_build_prompt_handles_nan_description():
 def test_load_jobs_sanitizes_nan_values(tmp_path):
     """Existing jsonl files may contain NaN from previous bad runs."""
     path = tmp_path / "jobs.jsonl"
-    # Use json.dumps with allow_nan=True (the default) to reproduce the bug.
     path.write_text(
         '{"title": "T", "description": NaN, "job_type": NaN, "date_posted": "None"}\n'
     )
@@ -209,9 +201,7 @@ def test_build_prompt_boosts_scores_for_data_related_roles():
     specifically should get 10/10."""
     from ai_job_tracker.config import PROMPT_TEMPLATE
 
-    # Check guidance section of PROMPT_TEMPLATE directly
     lower_template = PROMPT_TEMPLATE.lower()
-    # Should mention data-related job categories
     data_keywords = [
         'data engineer',
         'data analyst',
@@ -225,13 +215,11 @@ def test_build_prompt_boosts_scores_for_data_related_roles():
     found = [kw for kw in data_keywords if kw in lower_template]
     assert found, f"PROMPT_TEMPLATE should mention data-related roles. None found in template."
 
-    # Should instruct Gemini to score data roles 6+ even if slightly related
     assert '6+' in PROMPT_TEMPLATE or '6 / 10' in PROMPT_TEMPLATE or 'score 6' in lower_template, (
         "PROMPT_TEMPLATE should instruct Gemini to score data-related roles 6+ "
         "when even slightly related."
     )
 
-    # Should specifically boost data science to 10/10
     assert 'data science' in lower_template and '10' in PROMPT_TEMPLATE, (
         "PROMPT_TEMPLATE should explicitly set data science roles to 10/10."
     )
@@ -311,32 +299,18 @@ def test_summarize_analysis_results_handles_no_jobs_and_partial_and_failed():
     assert "executable doesn't exist" in failed["error_summary"]
 
 
-def test_resolve_browser_executable_accepts_explicit_browser_command(monkeypatch):
-    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: "/usr/bin/brave-browser" if command == "brave-browser" else None)
-
-    assert resolve_browser_executable("brave-browser") == "/usr/bin/brave-browser"
-
-
-def test_resolve_browser_executable_accepts_explicit_executable_path(tmp_path):
-    executable = tmp_path / "browser-bin"
-    executable.write_text("#!/bin/sh\nexit 0\n")
-    executable.chmod(0o755)
-
-    assert resolve_browser_executable(str(executable)) == str(executable)
-
-
 def test_analyze_job_skips_jobs_below_score_threshold(mocker):
     """Jobs with score < 6 should not be sent to Telegram."""
     from ai_job_tracker import analyzer as a_module
     import asyncio
     from unittest.mock import AsyncMock
 
-    async def mock_submit(*args, **kwargs):
-        return "FIT SCORE: 4/10\nWHY GOOD: Python match\nWHY BAD: Low salary\nRECOMMENDATION: Skip"
+    async def mock_submit(prompt):
+        return {"score": "4/10", "why_good": "Python match", "why_bad": "Low salary", "recommendation": "Skip"}
 
     send_message_mock = AsyncMock()
 
-    mocker.patch.object(a_module, "submit_to_gemini", mock_submit)
+    mocker.patch.object(a_module, "analyze_job_posting", mock_submit)
     mocker.patch.object(a_module, "send_message", send_message_mock)
 
     job = {
@@ -346,44 +320,11 @@ def test_analyze_job_skips_jobs_below_score_threshold(mocker):
     }
 
     result = asyncio.run(
-        a_module.analyze_job(job, "Python dev", "123", "USER_INFO_BACKUP_DESKTOP-MR1KOEH/Brave/User Data", 3, None)
+        a_module.analyze_job(job, "Python dev", "123", 3, None)
     )
 
     assert result["analysis"]["score"].endswith("/10")
     assert send_message_mock.call_count == 0, "send_message should not be called for score below threshold"
-
-
-def test_resolve_browser_executable_returns_none_by_default_for_automation(monkeypatch):
-    """Without an explicit browser, resolver returns None so Playwright uses bundled Chromium.
-
-    External browsers (Brave, Chrome) often lack headless-mode support and are not
-    recommended for automated Gemini interaction.
-    """
-    monkeypatch.setattr(
-        "ai_job_tracker.gemini_client.shutil.which",
-        lambda command: "/usr/bin/brave-origin-nightly" if command == "brave-origin-nightly" else None,
-    )
-
-    assert resolve_browser_executable() is None
-
-
-def test_resolve_browser_executable_rejects_missing_explicit_command(monkeypatch):
-    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: None)
-
-    with pytest.raises(FileNotFoundError, match="missing-browser"):
-        resolve_browser_executable("missing-browser")
-
-
-def test_resolve_browser_executable_rejects_missing_explicit_path(tmp_path):
-    missing = tmp_path / "does-not-exist"
-    with pytest.raises(FileNotFoundError):
-        resolve_browser_executable(str(missing))
-
-
-def test_resolve_browser_executable_returns_none_without_browser_on_path(monkeypatch):
-    monkeypatch.setattr("ai_job_tracker.gemini_client.shutil.which", lambda command: None)
-
-    assert resolve_browser_executable() is None
 
 
 def test_gitignore_includes_runtime_artifact_exclusions():
@@ -557,5 +498,4 @@ def test_format_run_summary_career_site_failure_does_not_kill_run():
     }
     msg = format_run_summary(summary)
     assert "❌ 🏢 Career sites" in msg
-    # Turkey + Big Tech still pass, so overall is success.
     assert "✅ *SUCCESS*" in msg

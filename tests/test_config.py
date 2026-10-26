@@ -80,7 +80,10 @@ def test_big_tech_companies_has_all_seven():
 
 
 def test_settings_defaults_apply_without_env(monkeypatch, tmp_path):
-    for key in ("PROFILE_FILE", "JOBS_INPUT_FILE", "BROWSER_PROFILE_PATH", "TELEGRAM_BOT_TOKEN"):
+    for key in (
+        "PROFILE_FILE", "JOBS_INPUT_FILE", "AI_API_KEY",
+        "TELEGRAM_BOT_TOKEN", "ANALYSIS_BACKEND", "BROWSER_PROFILE_PATH",
+    ):
         monkeypatch.delenv(key, raising=False)
 
     loaded = Settings(_env_file=tmp_path / "missing.env")
@@ -88,8 +91,11 @@ def test_settings_defaults_apply_without_env(monkeypatch, tmp_path):
     assert loaded.profile_file == "profile.txt"
     assert loaded.jobs_input_file == "jobs.jsonl"
     assert loaded.analysis_output_file == "analysis_results.jsonl"
-    assert loaded.gemini_url == "https://gemini.google.com/app"
+    assert loaded.analysis_backend == "api"
+    assert loaded.ai_model == "google:gemini-2.5-flash"
     assert loaded.telegram_bot_token is None
+    assert loaded.ai_api_key is None
+    assert loaded.browser_profile_path == ""
     assert loaded.gemini_browser_executable is None
 
 
@@ -98,14 +104,14 @@ def test_settings_read_from_env_file(tmp_path):
     env_file.write_text(
         "TELEGRAM_BOT_TOKEN=file-token\n"
         "PROFILE_FILE=cv.txt\n"
-        "GEMINI_URL=https://example.test/app\n"
+        "AI_API_KEY=test-key-123\n"
     )
 
     loaded = Settings(_env_file=env_file)
 
     assert loaded.telegram_bot_token == "file-token"
     assert loaded.profile_file == "cv.txt"
-    assert loaded.gemini_url == "https://example.test/app"
+    assert loaded.ai_api_key == "test-key-123"
 
 
 def test_process_env_wins_over_env_file(monkeypatch, tmp_path):
@@ -120,12 +126,12 @@ def test_process_env_wins_over_env_file(monkeypatch, tmp_path):
 def test_blank_value_is_treated_as_unset(monkeypatch, tmp_path, blank):
     """`.env.example` ships blank keys; those must not override defaults."""
     monkeypatch.setenv("PROFILE_FILE", blank)
-    monkeypatch.setenv("BROWSER_PROFILE_PATH", blank)
+    monkeypatch.setenv("AI_API_KEY", blank)
 
     loaded = Settings(_env_file=tmp_path / "missing.env")
 
     assert loaded.profile_file == "profile.txt"
-    assert loaded.browser_profile_path.endswith("Brave/User Data")
+    assert loaded.ai_api_key is None
 
 
 def test_settings_ignores_unrelated_env_vars(monkeypatch, tmp_path):
