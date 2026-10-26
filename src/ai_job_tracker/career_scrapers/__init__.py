@@ -2,8 +2,8 @@
 
 Scrapers are registered by importing each concrete class at the top and
 adding it to the SCRAPERS dict comprehension below. Tier-1 (Amazon) is a
-working implementation; tier-2/3 scrapers are stubs returning [] that
-log their failure via the CLI and can be filled in later.
+working implementation; tier-2/3 scrapers are explicitly unsupported and are
+reported without being invoked until real integrations replace them.
 """
 from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 

@@ -1,8 +1,9 @@
 """Big Tech career sites scraper CLI.
 
 Loads every registered scraper from career_scrapers.SCRAPERS, invokes each
-in isolation (per-scraper failure does not abort), aggregates the results,
-dedupes by job_url, and writes to the output file with --append semantics.
+operational source in isolation (per-scraper failure does not abort), reports
+unsupported sources, aggregates the results, dedupes by job_url, and writes to
+the output file with --append semantics.
 
 Exit codes:
   0 — at least one scraper returned >0 jobs (others may have failed).
@@ -17,10 +18,12 @@ from ai_job_tracker.career_scrapers import SCRAPERS, BaseCareerScraper
 from ai_job_tracker.scraper import append_jobs_jsonl, deduplicate_jobs, read_existing_jobs
 
 
-def _print_per_scraper_summary(results: dict, errors: dict) -> None:
+def _print_per_scraper_summary(results: dict, errors: dict, unsupported: set[str]) -> None:
     print("\nPer-scraper results:")
     for name in SCRAPERS:
-        if name in errors:
+        if name in unsupported:
+            print(f"  ⏭️  {name}: unsupported")
+        elif name in errors:
             print(f"  ❌ {name}: {errors[name]}")
         else:
             count = len(results.get(name, []))
@@ -51,8 +54,12 @@ def run(
 
     results: dict[str, list[dict]] = {}
     errors: dict[str, str] = {}
+    unsupported: set[str] = set()
 
     for name, scraper_cls in SCRAPERS.items():
+        if not scraper_cls.operational:
+            unsupported.add(name)
+            continue
         try:
             scraper: BaseCareerScraper = scraper_cls(proxy=proxy)
             records = scraper.fetch_jobs(query, limit=limit)
@@ -62,7 +69,7 @@ def run(
             errors[name] = f"{type(e).__name__}: {e}"
             print(f"  [{name}] FAILED: {errors[name]}")
 
-    _print_per_scraper_summary(results, errors)
+    _print_per_scraper_summary(results, errors, unsupported)
 
     all_records: list[dict] = []
     for recs in results.values():
@@ -70,13 +77,15 @@ def run(
     all_records = deduplicate_jobs(all_records)
 
     if not all_records:
-        # No records contributed by any scraper — either every scraper raised
-        # an exception, or every scraper returned [] (or a mix of both).
-        # Per spec, exit 1 in either case.
+        # No records were contributed by an operational scraper: every one
+        # either raised or returned an empty result.
         n_errored = len(errors)
-        n_total = len(SCRAPERS)
-        n_empty = n_total - n_errored
-        print(f"\nNo records from any scraper ({n_errored} errors, {n_empty} empty). Exiting 1.")
+        n_operational = len(SCRAPERS) - len(unsupported)
+        n_empty = n_operational - n_errored
+        print(
+            f"\nNo records from any operational scraper "
+            f"({n_errored} errors, {n_empty} empty, {len(unsupported)} unsupported). Exiting 1."
+        )
         return 1
 
     new_count = append_jobs_jsonl(all_records, output, existing_urls)

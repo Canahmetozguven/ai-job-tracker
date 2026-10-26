@@ -24,6 +24,7 @@ from ai_job_tracker.career_scrapers.base import BaseCareerScraper
 class AmazonScraper(BaseCareerScraper):
     name = "Amazon"
     base_url = "https://amazon.jobs"
+    operational = True
     rate_limit_seconds = 1.0
 
     SEARCH_URL = "https://amazon.jobs/en/search.json"

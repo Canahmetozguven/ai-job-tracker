@@ -156,8 +156,8 @@ def career(
     no_proxy: bool = typer.Option(False, "--no-proxy", help="Disable proxy rotation"),
     proxy: str = typer.Option(None, "--proxy", help="Use a specific proxy instead of random"),
 ) -> None:
-    """Scrape the Big Tech 7 career sites directly (Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla)."""
-    # Exit 1 when every scraper errored or returned nothing.
+    """Scrape Amazon Careers and report unavailable Big Tech sources."""
+    # Exit 1 when every operational scraper errored or returned nothing.
     raise typer.Exit(
         career_scraper.run(
             query=query,

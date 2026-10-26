@@ -12,13 +12,15 @@ class BaseCareerScraper:
     """Abstract base for one company's career-site scraper.
 
     Subclasses must set `name` and `base_url` as class vars, and override
-    `fetch_jobs(query, limit) -> list[dict]`. The framework provides throttling,
+    `fetch_jobs(query, limit) -> list[dict]`. A source opts into execution only
+    after setting `operational = True`. The framework provides throttling,
     retry, and a record-builder helper that fills `source_pass` and
     `source_company` automatically.
     """
 
     name: ClassVar[str] = ""
     base_url: ClassVar[str] = ""
+    operational: ClassVar[bool] = False
     rate_limit_seconds: ClassVar[float] = 1.0
     # Max total attempts (first try + retries). 3 means: try once, retry up to 2 times.
     max_retries: ClassVar[int] = 3

@@ -130,7 +130,7 @@ def format_run_summary(summary: dict) -> str:
     pass_labels = {
         "turkey_local":    "🇹🇷 Turkey local",
         "big_tech_global": "🌍 Big Tech 7",
-        "career_site":     "🏢 Career sites",
+        "career_site":     "🏢 Amazon Careers",
     }
     if isinstance(sc, dict) and "turkey_local" in sc:
         # New per-pass format
