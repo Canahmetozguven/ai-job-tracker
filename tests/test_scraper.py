@@ -1,6 +1,36 @@
+import asyncio
 import math
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from ai_job_tracker.scraper import deduplicate_jobs, df_to_job_records, filter_big_tech, _clean
+
+from ai_job_tracker.scraper import _clean, deduplicate_jobs, df_to_job_records, filter_big_tech, run_daemon
+
+
+def test_daemon_completes_first_cycle_with_resolved_proxy(tmp_path):
+    config = {
+        "interval": 30,
+        "output": str(tmp_path / "jobs.jsonl"),
+        "query": "data scientist",
+        "location": "Turkey",
+        "source": 1,
+        "big_tech": False,
+    }
+
+    with (
+        patch("ai_job_tracker.scraper.read_existing_jobs", return_value=set()),
+        patch("ai_job_tracker.scraper.run_scrape", new_callable=AsyncMock, return_value=[]) as run_scrape,
+        patch("ai_job_tracker.scraper.append_jobs_jsonl", return_value=0),
+        patch(
+            "ai_job_tracker.scraper.asyncio.sleep",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("stop after first cycle"),
+        ),
+        pytest.raises(RuntimeError, match="stop after first cycle"),
+    ):
+        asyncio.run(run_daemon(config, proxy="http://proxy.example:8080"))
+
+    run_scrape.assert_awaited_once_with(config, "http://proxy.example:8080")
 
 def test_deduplicate_jobs():
     jobs = [
