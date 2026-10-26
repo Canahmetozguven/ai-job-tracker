@@ -149,7 +149,7 @@ def career(
     limit: int = typer.Option(50, "--limit", "-n", help="Max results per scraper"),
     hours: int = typer.Option(
         0, "--hours", "-H",
-        help="Filter by age (hours), 0=disabled. Currently a no-op for career sites; reserved for future use.",
+        help="Filter by age (hours), 0=disabled. Jobs with unknown or invalid dates are retained.",
     ),
     output: str = typer.Option("jobs_career.jsonl", "--output", "-o", help="Output file path"),
     append: bool = typer.Option(False, "--append", "-a", help="Append to output file (don't overwrite)"),
