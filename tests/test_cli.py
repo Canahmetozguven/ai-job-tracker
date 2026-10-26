@@ -1,5 +1,6 @@
 """Tests for the `job` Typer app that fronts every pipeline step."""
 
+import sys
 import tomllib
 from importlib import import_module
 from unittest.mock import patch
@@ -8,7 +9,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from ai_job_tracker import proxy_scraper, run_daily, scraper, validate_proxies
+from ai_job_tracker import cli as cli_module, proxy_scraper, run_daily, scraper, validate_proxies
 from ai_job_tracker.cli import app
 
 from conftest import CLI_ENV, plain
@@ -153,6 +154,15 @@ def test_entry_point_is_wired_to_the_typer_app():
     assert isinstance(target, typer.Typer)
 
 
+def test_daily_module_entry_point_selects_daily_command(monkeypatch):
+    invoked_arguments = []
+    monkeypatch.setattr(cli_module, "app", lambda *, args: invoked_arguments.append(args))
+
+    run_daily.main(["--chat-id", "chat-123"])
+
+    assert invoked_arguments == [["daily", "--chat-id", "chat-123"]]
+
+
 def test_daily_threads_configured_analysis_output_through_accounting(monkeypatch):
     """The child's --output and the summary's accounting must be the same path.
 
@@ -177,6 +187,7 @@ def test_daily_threads_configured_analysis_output_through_accounting(monkeypatch
     run_daily.run("chat-123")
 
     analyze_argv = next(a for a in argvs if "analyze" in a)
+    assert all(argv[:3] == [sys.executable, "-m", "ai_job_tracker.cli"] for argv in argvs)
     assert "--output" in analyze_argv
     assert analyze_argv[analyze_argv.index("--output") + 1] == "custom_results.jsonl"
     assert counted == ["custom_results.jsonl"]

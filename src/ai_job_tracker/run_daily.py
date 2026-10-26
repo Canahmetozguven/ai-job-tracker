@@ -16,9 +16,8 @@ from ai_job_tracker import telegram_notify
 import telegram
 from ai_job_tracker import proxy_scraper
 
-# Child steps run as `-m` modules under the *same* interpreter running this
-# process. Launched via the `job-daily` console script, sys.executable is the
-# venv Python, so cron needs no absolute path baked in.
+# Child steps run as `-m` modules under the same interpreter as this process,
+# so virtual environments and installations need no hard-coded Python path.
 PYTHON = sys.executable
 
 MAX_RETRIES = 3
@@ -343,7 +342,13 @@ def run(chat_id: str):
     print_summary(chat_id=chat_id)
     print("\nDone!")
 
-if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+def main(arguments: list[str] | None = None) -> None:
+    """Run the daily subcommand when this module is executed directly."""
     from ai_job_tracker.cli import app
 
-    app()
+    daily_arguments = sys.argv[1:] if arguments is None else arguments
+    app(args=["daily", *daily_arguments])
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised through main()
+    main()

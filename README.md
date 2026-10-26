@@ -264,8 +264,8 @@ uv run job daily
 # Override the destination for this run
 uv run job daily --chat-id "your-chat-id"
 
-# For cron (runs every 30 minutes)
-*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job daily >> cron.log 2>&1
+# For cron (runs every 30 minutes — use the absolute path to uv)
+*/30 * * * * ~/.local/bin/uv --directory /path/to/ai-job-tracker run job daily >> /path/to/ai-job-tracker/cron.log 2>&1
 ```
 
 The daily runner:
@@ -461,11 +461,14 @@ For automatic hourly scraping + analysis:
 # Edit crontab
 crontab -e
 
-# Add this line (runs every 30 minutes)
-*/30 * * * * cd /path/to/ai-job-tracker && .venv/bin/job daily >> cron.log 2>&1
+# Add this line (runs every 30 minutes — use the absolute path to uv)
+*/30 * * * * ~/.local/bin/uv --directory /path/to/ai-job-tracker run job daily >> /path/to/ai-job-tracker/cron.log 2>&1
 ```
 
-Logs are written to `cron.log` in the project directory.
+`uv --directory` makes the schedule independent of cron's working directory
+while loading the selected project's environment. Use the absolute path to
+`uv` (find it with `which uv`) since cron runs with a minimal `PATH`. Logs
+are written to `cron.log` in the project directory.
 
 ---
 
