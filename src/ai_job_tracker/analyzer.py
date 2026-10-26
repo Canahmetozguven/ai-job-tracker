@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import sys
 from datetime import datetime, timedelta
 from ai_job_tracker.config import settings
 from ai_job_tracker.user_profile import load_profile
@@ -221,7 +222,17 @@ async def run_analysis(
     print(f"Results saved to {output}")
 
 
-if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
+def main(arguments: list[str] | None = None) -> None:
+    """Run the analyzer subcommand when this module is executed directly."""
+    import typer.main
+
     from ai_job_tracker.cli import app
 
-    app()
+    analyzer_arguments = sys.argv[1:] if arguments is None else arguments
+    click_app = typer.main.get_command(app)
+    analyze_cmd = click_app.commands["analyze"]
+    analyze_cmd.main(args=analyzer_arguments, prog_name="python -m ai_job_tracker.analyzer")
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised through main()
+    main()

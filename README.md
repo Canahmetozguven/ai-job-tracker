@@ -241,6 +241,9 @@ uv run job analyze --jobs jobs.jsonl --skip-seen
 
 # Limit to 5 jobs
 uv run job analyze --jobs jobs.jsonl --limit 5
+
+# Module invocation is also supported
+uv run python -m ai_job_tracker.analyzer --jobs jobs.jsonl --chat-id "your-chat-id"
 ```
 
 | Option | Default | Description |
@@ -252,6 +255,11 @@ uv run job analyze --jobs jobs.jsonl --limit 5
 | `--skip-seen` | false | Skip already-analyzed jobs |
 | `--chat-id` | `TELEGRAM_CHAT_ID` | Telegram chat ID (required) |
 | `--retries` | `3` | Max retries per job on Gemini failure |
+
+Set `TELEGRAM_CHAT_ID` in the environment for the default destination. A
+non-empty `--chat-id` value takes precedence for that invocation. The analyzer
+exits with an actionable configuration error if the bot token or destination
+is missing.
 
 ### Daily Runner
 
