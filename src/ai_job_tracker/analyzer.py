@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ai_job_tracker.config import settings
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs
@@ -42,25 +42,35 @@ def get_seen_urls(results_file: str) -> set[str]:
     return seen_urls
 
 def filter_recent_jobs(jobs: list, hours: int) -> list:
-    """Filter jobs posted within last N hours."""
+    """Filter jobs posted within the last N hours using an aware UTC cutoff.
+
+    Naive timestamps are interpreted as UTC, and the cutoff boundary is
+    inclusive. Jobs without a timestamp are excluded; jobs with a present but
+    malformed timestamp are retained so an uncertain date does not hide an
+    otherwise valid posting.
+    """
     if hours <= 0:
         return jobs
-    cutoff = datetime.now() - timedelta(hours=hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     filtered = []
     for job in jobs:
         date_str = job.get('date_posted')
         if not date_str:
             continue
+        if not isinstance(date_str, str):
+            filtered.append(job)
+            continue
         try:
-            # Try parsing ISO format date
             job_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            # If date has no timezone, assume UTC
-            if job_date.tzinfo is None:
-                job_date = job_date.replace(tzinfo=None)
-            if job_date >= cutoff:
-                filtered.append(job)
-        except (ValueError, TypeError):
-            # If date parsing fails, include the job
+        except ValueError:
+            filtered.append(job)
+            continue
+
+        if job_date.tzinfo is None:
+            job_date = job_date.replace(tzinfo=timezone.utc)
+        else:
+            job_date = job_date.astimezone(timezone.utc)
+        if job_date >= cutoff:
             filtered.append(job)
     return filtered
 
