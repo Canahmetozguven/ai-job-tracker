@@ -1,3 +1,4 @@
+import asyncio
 import json
 import copy
 from contextlib import redirect_stdout
@@ -5,7 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
-from ai_job_tracker import run_daily
+from ai_job_tracker import run_daily, telegram_notify
 from ai_job_tracker.user_profile import load_profile
 from ai_job_tracker.job_loader import load_jobs, count_jobs
 from ai_job_tracker.analyzer import get_seen_urls
@@ -112,6 +113,46 @@ def test_format_job_analysis():
     assert '9/10' in msg
     assert 'Django and AWS' in msg
     assert 'Apply' in msg
+
+
+def test_format_job_analysis_escapes_every_dynamic_field():
+    message = format_job_analysis(
+        {
+            "title": "Data <Engineer>",
+            "company": "R&D",
+            "location": "Istanbul > Remote",
+            "job_url": "https://example.com/?a=1&b=<tag>",
+        },
+        {
+            "score": "8<9 & rising",
+            "why_good": '<script>alert("x")</script>',
+            "why_bad": "A&B",
+            "recommendation": "Apply > now",
+        },
+    )
+
+    assert "Data &lt;Engineer&gt;" in message
+    assert "R&amp;D" in message
+    assert "Istanbul &gt; Remote" in message
+    assert "https://example.com/?a=1&amp;b=&lt;tag&gt;" in message
+    assert "8&lt;9 &amp; rising" in message
+    assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in message
+    assert "A&amp;B" in message
+    assert "Apply &gt; now" in message
+
+
+def test_send_message_uses_html_parse_mode(mocker):
+    telegram_bot = mocker.Mock()
+    telegram_bot.send_message = mocker.AsyncMock()
+    mocker.patch.object(telegram_notify.telegram, "Bot", return_value=telegram_bot)
+
+    asyncio.run(telegram_notify.send_message("chat-id", "<b>Safe</b>", "token"))
+
+    telegram_bot.send_message.assert_awaited_once_with(
+        chat_id="chat-id",
+        text="<b>Safe</b>",
+        parse_mode=telegram_notify.telegram.constants.ParseMode.HTML,
+    )
 
 
 def test_build_prompt_uses_actionable_shortlist_guidance():
@@ -427,7 +468,7 @@ def test_format_run_summary_handles_no_jobs_and_partial():
     assert "Status: NO JOBS" in no_jobs_message
     assert "No new jobs to analyze" in no_jobs_message
     assert "cron is still running" in no_jobs_message
-    assert "✅ *SUCCESS*" in no_jobs_message
+    assert "✅ <b>SUCCESS</b>" in no_jobs_message
 
     summary["analyze"] = {
         "status": "partial",
@@ -438,7 +479,7 @@ def test_format_run_summary_handles_no_jobs_and_partial():
     }
     partial_message = format_run_summary(summary)
     assert "Status: PARTIAL" in partial_message
-    assert "❌ *ISSUES DETECTED*" in partial_message
+    assert "❌ <b>ISSUES DETECTED</b>" in partial_message
 
 
 def test_format_run_summary_marks_failed_analysis_as_issues():
@@ -451,7 +492,42 @@ def test_format_run_summary_marks_failed_analysis_as_issues():
 
     msg = format_run_summary(summary)
     assert "Status: FAILED" in msg
-    assert "❌ *ISSUES DETECTED*" in msg
+    assert "❌ <b>ISSUES DETECTED</b>" in msg
+
+
+def test_format_run_summary_escapes_dynamic_error_and_proxy_content():
+    summary = {
+        "proxy_validation": {"working": 1, "total": 1, "selected": "proxy<&>"},
+        "scrape": {"status": "success", "found": 1, "new": 1},
+        "analyze": {
+            "status": "failed",
+            "processed": 1,
+            "succeeded": 0,
+            "failed": 1,
+            "error_summary": "failed <bad> & retry",
+        },
+        "errors": ["boom <tag> & retry"],
+    }
+
+    message = format_run_summary(summary)
+
+    assert "proxy&lt;&amp;&gt;" in message
+    assert "failed &lt;bad&gt; &amp; retry" in message
+    assert "boom &lt;tag&gt; &amp; retry" in message
+
+
+def test_daily_summary_uses_shared_safe_sender(mocker):
+    send_message_mock = mocker.patch.object(
+        run_daily.telegram_notify,
+        "send_message",
+        new=mocker.AsyncMock(),
+    )
+    mocker.patch.object(run_daily, "require_telegram_credentials", return_value=("token", "chat-id"))
+    mocker.patch.object(run_daily.telegram_notify, "format_run_summary", return_value="<b>Safe</b>")
+
+    run_daily.send_telegram_summary({})
+
+    send_message_mock.assert_awaited_once_with("chat-id", "<b>Safe</b>", "token")
 
 
 def test_format_run_summary_renders_per_pass_breakdown():
@@ -473,7 +549,7 @@ def test_format_run_summary_renders_per_pass_breakdown():
     assert "🌍 Big Tech 7" in msg
     assert "Found: 8" in msg
     assert "Found: 3" in msg
-    assert "✅ *SUCCESS*" in msg
+    assert "✅ <b>SUCCESS</b>" in msg
 
 
 def test_format_run_summary_per_pass_considers_either_pass_a_success():
@@ -491,7 +567,7 @@ def test_format_run_summary_per_pass_considers_either_pass_a_success():
     msg = format_run_summary(summary)
     assert "❌ 🌍 Big Tech 7" in msg
     assert "✅ 🇹🇷 Turkey local" in msg
-    assert "✅ *SUCCESS*" in msg
+    assert "✅ <b>SUCCESS</b>" in msg
 
 
 def test_print_summary_marks_partial_analysis_as_issues_detected_and_partial_status():
@@ -540,7 +616,7 @@ def test_format_run_summary_renders_three_pass_breakdown():
     assert "🌍 Big Tech 7" in msg
     assert "🏢 Career sites" in msg
     assert "Found: 5" in msg
-    assert "✅ *SUCCESS*" in msg
+    assert "✅ <b>SUCCESS</b>" in msg
 
 
 def test_format_run_summary_career_site_failure_does_not_kill_run():
@@ -558,4 +634,4 @@ def test_format_run_summary_career_site_failure_does_not_kill_run():
     msg = format_run_summary(summary)
     assert "❌ 🏢 Career sites" in msg
     # Turkey + Big Tech still pass, so overall is success.
-    assert "✅ *SUCCESS*" in msg
+    assert "✅ <b>SUCCESS</b>" in msg
