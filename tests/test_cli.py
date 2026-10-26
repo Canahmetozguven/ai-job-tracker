@@ -1,5 +1,7 @@
 """Tests for the `job` Typer app that fronts every pipeline step."""
 
+import copy
+import json
 import tomllib
 from importlib import import_module
 from unittest.mock import patch
@@ -8,7 +10,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from ai_job_tracker import proxy_scraper, run_daily, scraper, validate_proxies
+from ai_job_tracker import analyzer, cli as cli_module, proxy_scraper, run_daily, scraper, validate_proxies
 from ai_job_tracker.cli import app
 
 from conftest import CLI_ENV, plain
@@ -103,6 +105,87 @@ def test_analyze_without_telegram_credentials_fails_cleanly(monkeypatch):
     assert "TELEGRAM_BOT_TOKEN" in plain(result.output)
 
 
+@pytest.mark.parametrize(
+    ("outcome", "expected_exit_code"),
+    [
+        ("no_jobs", 0),
+        ("success", 0),
+        ("partial", 0),
+        ("failed", 1),
+    ],
+)
+def test_analyze_exit_status_reflects_run_outcome(tmp_path, mocker, outcome, expected_exit_code):
+    profile_path = tmp_path / "profile.txt"
+    jobs_path = tmp_path / "jobs.jsonl"
+    output_path = tmp_path / "analysis.jsonl"
+    profile_path.write_text("Python developer")
+
+    job_count = {"no_jobs": 0, "success": 1, "partial": 2, "failed": 1}[outcome]
+    jobs = [{"title": f"Job {index}", "job_url": f"https://example.com/{index}"} for index in range(job_count)]
+    jobs_path.write_text("".join(json.dumps(job) + "\n" for job in jobs))
+
+    successful_result = {
+        "job": jobs[0] if jobs else {},
+        "analysis": {"score": "8/10", "recommendation": "Apply"},
+        "gemini_response": "response",
+    }
+    outcomes = {
+        "no_jobs": [],
+        "success": [successful_result],
+        "partial": [successful_result, RuntimeError("analysis failed")],
+        "failed": [RuntimeError("analysis failed")],
+    }
+    mocker.patch.object(analyzer, "analyze_job", side_effect=outcomes[outcome])
+    mocker.patch.object(analyzer.asyncio, "sleep", new=mocker.AsyncMock())
+    mocker.patch.object(cli_module, "_require_telegram", return_value=("token", "chat-id"))
+
+    result = runner.invoke(
+        app,
+        [
+            "analyze",
+            "--profile",
+            str(profile_path),
+            "--jobs",
+            str(jobs_path),
+            "--output",
+            str(output_path),
+            "--chat-id",
+            "chat-id",
+        ],
+    )
+
+    assert result.exit_code == expected_exit_code, plain(result.output)
+
+
+def test_analyze_persists_error_record_before_failing(tmp_path, mocker):
+    profile_path = tmp_path / "profile.txt"
+    jobs_path = tmp_path / "jobs.jsonl"
+    output_path = tmp_path / "analysis.jsonl"
+    profile_path.write_text("Python developer")
+    jobs_path.write_text(json.dumps({"title": "Broken job", "job_url": "https://example.com/broken"}) + "\n")
+    mocker.patch.object(analyzer, "analyze_job", side_effect=RuntimeError("analysis failed"))
+    mocker.patch.object(cli_module, "_require_telegram", return_value=("token", "chat-id"))
+
+    result = runner.invoke(
+        app,
+        [
+            "analyze",
+            "--profile",
+            str(profile_path),
+            "--jobs",
+            str(jobs_path),
+            "--output",
+            str(output_path),
+            "--chat-id",
+            "chat-id",
+        ],
+    )
+
+    persisted_record = json.loads(output_path.read_text())
+    assert result.exit_code == 1
+    assert persisted_record["error"] == "analysis failed"
+
+
 def test_daily_without_telegram_credentials_fails_cleanly(monkeypatch):
     monkeypatch.setattr("ai_job_tracker.cli.settings.telegram_bot_token", None)
     monkeypatch.setattr("ai_job_tracker.cli.settings.telegram_chat_id", None)
@@ -163,21 +246,68 @@ def test_daily_threads_configured_analysis_output_through_accounting(monkeypatch
     """
     monkeypatch.setattr(run_daily.settings, "analysis_output_file", "custom_results.jsonl")
 
-    argvs = []
+    command_calls = []
     counted, read = [], []
 
     monkeypatch.setattr(run_daily, "validate_proxies", lambda: ["1.2.3.4:8080"])
     monkeypatch.setattr(run_daily, "print_summary", lambda **_: None)
     monkeypatch.setattr(run_daily, "_update_pass_summary", lambda *a, **k: None)
-    monkeypatch.setattr(run_daily, "run_command", lambda cmd, desc, **k: argvs.append(cmd) or True)
+    monkeypatch.setattr(
+        run_daily,
+        "run_command",
+        lambda cmd, desc, **kwargs: command_calls.append((cmd, kwargs)) or True,
+    )
     monkeypatch.setattr(run_daily, "count_jsonl_lines", lambda p: counted.append(p) or 0)
     monkeypatch.setattr(run_daily, "read_jsonl_records", lambda p, n: read.append(p) or [])
     monkeypatch.setattr(run_daily, "summarize_analysis_results", lambda records, ok: {})
 
     run_daily.run("chat-123")
 
-    analyze_argv = next(a for a in argvs if "analyze" in a)
+    analyze_argv, analyze_kwargs = next(call for call in command_calls if "analyze" in call[0])
     assert "--output" in analyze_argv
     assert analyze_argv[analyze_argv.index("--output") + 1] == "custom_results.jsonl"
+    assert analyze_kwargs["retries"] == 1
     assert counted == ["custom_results.jsonl"]
     assert read == ["custom_results.jsonl"]
+
+
+def test_daily_reports_failed_analyzer_exit_with_persisted_error_records(monkeypatch):
+    original_run_summary = copy.deepcopy(run_daily.run_summary)
+    run_daily.run_summary = {
+        "started_at": None,
+        "proxy_validation": {"total": 1, "working": 1, "selected": None},
+        "scrape": {
+            "turkey_local": {"found": 0, "new": 0, "status": "not_run"},
+            "big_tech_global": {"found": 0, "new": 0, "status": "not_run"},
+            "career_site": {"found": 0, "new": 0, "status": "not_run"},
+        },
+        "analyze": {"processed": 0, "succeeded": 0, "failed": 0, "status": "not_run", "error_summary": None},
+        "errors": [],
+    }
+    error_record = {"job": {"job_url": "https://failed.example/job"}, "error": "analysis failed"}
+
+    monkeypatch.setattr(run_daily, "validate_proxies", lambda: ["1.2.3.4:8080"])
+    monkeypatch.setattr(run_daily, "print_summary", lambda **_: None)
+    monkeypatch.setattr(run_daily, "_update_pass_summary", lambda *_: None)
+    monkeypatch.setattr(run_daily, "run_command", lambda command, *_args, **_kwargs: "analyze" not in command)
+    monkeypatch.setattr(run_daily, "count_jsonl_lines", lambda _path: 0)
+    monkeypatch.setattr(run_daily, "read_jsonl_records", lambda _path, _start: [error_record])
+
+    try:
+        with pytest.raises(SystemExit) as exit_info:
+            run_daily.run("chat-id")
+
+        assert exit_info.value.code == 1
+        assert run_daily.run_summary["analyze"] == {
+            "processed": 1,
+            "succeeded": 0,
+            "failed": 1,
+            "status": "failed",
+            "error_summary": "All 1 jobs failed. First error: analysis failed",
+        }
+        assert run_daily.run_summary["errors"] == [
+            "All 1 jobs failed. First error: analysis failed",
+            "Analysis failed",
+        ]
+    finally:
+        run_daily.run_summary = original_run_summary

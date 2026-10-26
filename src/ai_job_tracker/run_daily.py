@@ -321,6 +321,8 @@ def run(chat_id: str):
     # ANALYSIS_OUTPUT_FILE points somewhere other than the default.
     analysis_output = settings.analysis_output_file
     analysis_results_before = count_jsonl_lines(analysis_output)
+    # The analyzer already retries each Gemini request and persists failures.
+    # Retrying the whole command would duplicate those records in this run.
     analyze_ok = run_command([
         PYTHON, "-m", "ai_job_tracker.cli", "analyze",
         "--jobs", "jobs_linkedin.jsonl",
@@ -328,7 +330,7 @@ def run(chat_id: str):
         "--hours", "1",
         "--skip-seen",
         "--chat-id", chat_id,
-    ], "Analyzing jobs with Gemini")
+    ], "Analyzing jobs with Gemini", retries=1)
 
     new_analysis_results = read_jsonl_records(analysis_output, analysis_results_before)
     analysis_summary = summarize_analysis_results(new_analysis_results, analyze_ok)
@@ -341,6 +343,8 @@ def run(chat_id: str):
         run_summary["errors"].append("Analysis failed")
 
     print_summary(chat_id=chat_id)
+    if not analyze_ok:
+        sys.exit(1)
     print("\nDone!")
 
 if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI

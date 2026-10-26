@@ -12,6 +12,8 @@ from ai_job_tracker.analysis_validation import is_valid_analysis
 
 MAX_RETRIES = 3
 RETRY_DELAY = 30  # seconds
+ANALYSIS_EXIT_SUCCESS = 0
+ANALYSIS_EXIT_FAILED = 1
 
 def get_seen_urls(results_file: str) -> set[str]:
     """Get URLs of jobs with successful analysis records only.
@@ -159,11 +161,14 @@ async def run_analysis(
     hours: int = 0,
     skip_seen: bool = False,
     retries: int = MAX_RETRIES,
-) -> None:
+) -> int:
     """Analyze jobs with Gemini using fully resolved options.
 
     Parsing and credential validation live in ai_job_tracker.cli; this takes
     settled values only, including an already-validated Telegram token.
+
+    Returns zero for no jobs, full success, or partial success. Returns one
+    when every attempted job fails; error records are persisted first.
     """
     print(f"Loading profile from {profile_path}...")
     profile = load_profile(profile_path)
@@ -188,7 +193,7 @@ async def run_analysis(
 
     if not jobs:
         print("No jobs to process")
-        return
+        return ANALYSIS_EXIT_SUCCESS
 
     success_count = 0
     error_count = 0
@@ -219,6 +224,9 @@ async def run_analysis(
     print(f"\n{'='*50}")
     print(f"Complete: {success_count} succeeded, {error_count} failed")
     print(f"Results saved to {output}")
+    if error_count > 0 and success_count == 0:
+        return ANALYSIS_EXIT_FAILED
+    return ANALYSIS_EXIT_SUCCESS
 
 
 if __name__ == "__main__":  # pragma: no cover - delegated to the `job` CLI
